@@ -215,45 +215,260 @@ export const insightsService = {
 
 // Unified api interface
 export const api = {
-  getSubscriptions: subscriptionService.getSubscriptions,
-  getSubscriptionById: subscriptionService.getSubscriptionById,
-  addSubscription: subscriptionService.addSubscription,
-  updateSubscription: subscriptionService.updateSubscription,
-  pauseSubscription: subscriptionService.pauseSubscription,
-  cancelSubscription: subscriptionService.cancelSubscription,
-  deleteSubscription: subscriptionService.cancelSubscription,
+  getSubscriptions: async (category) => {
+    try {
+      const url = category && category !== 'all' ? `/api/subscriptions?category=${category}` : '/api/subscriptions';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        subscriptionsState = data;
+        return data;
+      }
+    } catch {}
+    return subscriptionService.getSubscriptions();
+  },
+  getSubscriptionById: async (id) => {
+    try {
+      const res = await fetch(`/api/subscriptions/${id}`);
+      if (res.ok) return await res.json();
+    } catch {}
+    return subscriptionService.getSubscriptionById(id);
+  },
+  addSubscription: async (subData) => {
+    try {
+      const res = await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subData)
+      });
+      if (res.ok) {
+        const newSub = await res.json();
+        subscriptionsState.push(newSub);
+        return newSub;
+      }
+    } catch {}
+    return subscriptionService.addSubscription(subData);
+  },
+  createSubscription: async (subData) => {
+    return api.addSubscription(subData);
+  },
+  updateSubscription: async (id, patch) => {
+    try {
+      const res = await fetch(`/api/subscriptions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        const idx = subscriptionsState.findIndex(s => s.id === id);
+        if (idx !== -1) subscriptionsState[idx] = updated;
+        return updated;
+      }
+    } catch {}
+    return subscriptionService.updateSubscription(id, patch);
+  },
+  pauseSubscription: async (id) => {
+    return api.updateSubscription(id, { status: 'paused', statusLabel: 'Paused' });
+  },
+  cancelSubscription: async (id) => {
+    try {
+      const res = await fetch(`/api/subscriptions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        subscriptionsState = subscriptionsState.filter(s => s.id !== id);
+        return { success: true };
+      }
+    } catch {}
+    return subscriptionService.cancelSubscription(id);
+  },
+  deleteSubscription: async (id) => {
+    return api.cancelSubscription(id);
+  },
 
   getAvailableServices: comparisonService.getAvailableServices,
   getComparisonPresets: comparisonService.getComparisonPresets,
-  compareServices: comparisonService.compareServices,
+  compareServices: async (serviceA = 'spotify', serviceB = 'applemusic') => {
+    try {
+      const res = await fetch('/api/comparison/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceA, serviceB })
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return comparisonService.compareServices(serviceA, serviceB);
+  },
 
-  getUpcomingReleases: recommendationService.getUpcomingReleases,
-  getUpcomingMovies: recommendationService.getUpcomingReleases,
-  getStrategicActions: recommendationService.getStrategicActions,
-  getOptimizerPlan: recommendationService.getOptimizerPlan,
-  getOptimizer: recommendationService.getOptimizerPlan,
-  getRecommendations: async () => recommendationService.getStrategicActions(),
+  getUpcomingReleases: async () => {
+    try {
+      const res = await fetch('/api/movies/upcoming');
+      if (res.ok) return await res.json();
+    } catch {}
+    return recommendationService.getUpcomingReleases();
+  },
+  getUpcomingMovies: async () => {
+    try {
+      const res = await fetch('/api/movies/upcoming');
+      if (res.ok) return await res.json();
+    } catch {}
+    return recommendationService.getUpcomingReleases();
+  },
+  getStrategicActions: async () => {
+    try {
+      const res = await fetch('/api/recommendations');
+      if (res.ok) return await res.json();
+    } catch {}
+    return recommendationService.getStrategicActions();
+  },
+  getOptimizerPlan: async (budget = userState.monthlyBudget, forceRefresh = false) => {
+    try {
+      const res = await fetch('/api/optimizer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget, forceRefresh })
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return recommendationService.getOptimizerPlan(budget);
+  },
+  refreshOptimizer: async (budget = userState.monthlyBudget) => {
+    try {
+      const res = await fetch('/api/optimizer/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ budget })
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return api.getOptimizerPlan(budget, true);
+  },
+  getOptimizer: async (budget, forceRefresh = false) => {
+    return api.getOptimizerPlan(budget, forceRefresh);
+  },
+  getRecommendations: async () => {
+    return api.getStrategicActions();
+  },
 
-  getWishlist: async () => [...wishlistState],
+  getWishlist: async () => {
+    try {
+      const res = await fetch('/api/wishlist');
+      if (res.ok) {
+        const data = await res.json();
+        wishlistState = data;
+        return data;
+      }
+    } catch {}
+    return [...wishlistState];
+  },
   addToWishlist: async (item) => {
+    try {
+      const res = await fetch('/api/wishlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+      if (res.ok) {
+        const added = await res.json();
+        wishlistState.push(added);
+        return added;
+      }
+    } catch {}
     const entry = { id: item.id || item.content_id || `w_${Date.now()}`, ...item };
     wishlistState.push(entry);
     return entry;
   },
   removeFromWishlist: async (contentId) => {
+    try {
+      const res = await fetch(`/api/wishlist/${contentId}`, { method: 'DELETE' });
+      if (res.ok) {
+        wishlistState = wishlistState.filter(w => w.content_id !== contentId && w.id !== contentId);
+        return { success: true };
+      }
+    } catch {}
     wishlistState = wishlistState.filter(w => w.content_id !== contentId && w.id !== contentId);
     return { success: true };
   },
 
-  getInsights: insightsService.getInsights,
-  getUser: async () => ({ ...userState }),
-  getProfile: async () => ({ ...userState }),
+  getInsights: async (period = 'thismonth') => {
+    try {
+      const res = await fetch(`/api/insights?period=${period}`);
+      if (res.ok) return await res.json();
+    } catch {}
+    return insightsService.getInsights(period);
+  },
+  getUser: async () => {
+    try {
+      const res = await fetch('/api/profile');
+      if (res.ok) {
+        const data = await res.json();
+        userState = data;
+        return data;
+      }
+    } catch {}
+    return { ...userState };
+  },
+  getProfile: async () => {
+    return api.getUser();
+  },
   updateUser: async (patch) => {
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        userState = updated;
+        return updated;
+      }
+    } catch {}
     userState = { ...userState, ...patch };
     return { ...userState };
   },
   updateProfile: async (patch) => {
-    userState = { ...userState, ...patch };
-    return { ...userState };
+    return api.updateUser(patch);
+  },
+
+  chatAdvisor: async (query) => {
+    try {
+      const res = await fetch('/api/assistant/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: query })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {}
+
+    // Smart local fallback
+    const q = (query || '').toLowerCase();
+    const subs = subscriptionsState || [];
+    const totalSpend = subs.reduce((sum, s) => sum + (s.price || 0), 0);
+
+    if (q.includes('spend') || q.includes('cost') || q.includes('how much')) {
+      return {
+        answer: `Based on your Trackey records, you currently spend ₹${totalSpend}/month across ${subs.length} subscriptions.`,
+        reason: `Your monthly budget is ₹${userState.monthlyBudget || 1000}.`,
+        action: { label: 'View Spending Insights', type: 'navigate_insights', payload: { period: 'thismonth' } }
+      };
+    }
+    if (q.includes('review') || q.includes('cut') || q.includes('cancel')) {
+      const low = subs.find(s => s.status === 'low' || s.usedDays <= 3);
+      if (low) {
+        return {
+          answer: `Reviewing ${low.name} is recommended.`,
+          reason: `Used only ${low.usedDays || 0} days this month for ₹${low.price}/month.`,
+          action: { label: `Review ${low.name}`, type: 'open_detail', payload: { id: low.id } }
+        };
+      }
+    }
+    return {
+      answer: `You currently have ${subs.length} subscriptions totaling ₹${totalSpend}/month.`,
+      reason: `Ask about your renewals, money leaks, service comparisons, or upcoming releases!`,
+      action: { label: 'Explore Optimizer', type: 'navigate_optimize', payload: {} }
+    };
   }
 };
+

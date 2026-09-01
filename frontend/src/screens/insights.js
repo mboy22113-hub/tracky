@@ -192,7 +192,7 @@ export function renderInsightsScreen(state) {
                         data-cat-name="${seg.label}"
                         data-cat-amt="₹${seg.amount}"
                         data-cat-pct="${seg.percentage}%"
-                        style="--anim-delay: ${seg.animationDelay};" />
+                        style="--target-offset: ${seg.strokeDashoffset}; --anim-delay: ${seg.animationDelay};" />
               `).join('')}
             </svg>
             
@@ -272,7 +272,7 @@ export function renderInsightsScreen(state) {
 
             <!-- Interactive Data Points -->
             ${coordinates.map((c, i) => `
-              <g class="trend-point-group" data-month="${c.month}" data-val="₹${c.value}" data-change="${c.change} (${c.changePct})" data-x="${c.x}" data-y="${c.y}">
+              <g class="trend-point-group" data-month="${c.month}" data-val="₹${c.value}" data-change="${c.change} (${c.changePct})" data-x="${c.x}" data-y="${c.y}" style="--point-delay: ${0.25 + i * 0.07}s;">
                 <circle class="trend-point-halo" cx="${c.x}" cy="${c.y}" r="9" fill="#2F6FED" fill-opacity="0.12"/>
                 <circle class="trend-point-dot ${i === coordinates.length - 1 ? 'active-pulse' : ''}" cx="${c.x}" cy="${c.y}" r="4.5" fill="#2F6FED" stroke="#FFFFFF" stroke-width="2.5"/>
                 <text class="trend-x-label" x="${c.x}" y="106" text-anchor="middle">${c.month}</text>

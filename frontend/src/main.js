@@ -86,7 +86,14 @@ function renderApp() {
 function navigateTo(screenId, subId = null) {
   state.activeScreen = screenId;
   if (subId) state.selectedSubId = subId;
-  renderApp();
+
+  if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(() => {
+      renderApp();
+    });
+  } else {
+    renderApp();
+  }
 }
 
 // Initial Data Fetching from FastAPI REST backend
@@ -126,9 +133,9 @@ async function loadInsights(period = 'thismonth') {
   }
 }
 
-async function loadOptimizer(budget = null) {
+async function loadOptimizer(budget = null, forceRefresh = false) {
   try {
-    const res = await api.getOptimizer(budget);
+    const res = await api.getOptimizer(budget, forceRefresh);
     state.optimizer = res;
     if (state.activeScreen === 'optimize') renderApp();
   } catch (err) {
@@ -396,7 +403,63 @@ function attachScreenListeners() {
 
   // Home Screen Specifics
   const optCta = document.getElementById('home-opt-cta');
-  if (optCta) optCta.onclick = () => navigateTo('optimize');
+  if (optCta) {
+    optCta.onclick = () => {
+      state.optimizerStep = 1;
+      navigateTo('optimize');
+    };
+  }
+
+  const homeSpendStat = document.getElementById('home-spend-stat');
+  if (homeSpendStat) {
+    homeSpendStat.onclick = () => {
+      state.optimizerStep = 1;
+      navigateTo('optimize');
+    };
+  }
+
+  const homeSavingsStat = document.getElementById('home-savings-stat');
+  if (homeSavingsStat) {
+    homeSavingsStat.onclick = () => {
+      state.optimizerStep = 1;
+      navigateTo('optimize');
+    };
+  }
+
+  const homeSeeAllAttention = document.getElementById('home-see-all-attention');
+  if (homeSeeAllAttention) {
+    homeSeeAllAttention.onclick = () => {
+      state.optimizerStep = 2;
+      navigateTo('optimize');
+    };
+  }
+
+  // Attention Items Click / Button Action
+  document.querySelectorAll('.attention-item, .attention-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const target = btn.getAttribute('data-action-target') || 'optimize';
+      const step = parseInt(btn.getAttribute('data-action-step') || '1', 10);
+      if (state.optimizer) {
+        state.optimizer.activeStep = step;
+      }
+      state.optimizerStep = step;
+      navigateTo(target);
+    };
+  });
+
+  // Quick Action Grid Cards
+  const quickAdd = document.getElementById('quick-action-add');
+  if (quickAdd) quickAdd.onclick = openAddSubscriptionModal;
+
+  const quickOptimize = document.getElementById('quick-action-optimize');
+  if (quickOptimize) quickOptimize.onclick = () => navigateTo('optimize');
+
+  const quickCompare = document.getElementById('quick-action-compare');
+  if (quickCompare) quickCompare.onclick = () => navigateTo('compare');
+
+  const quickInsights = document.getElementById('quick-action-insights');
+  if (quickInsights) quickInsights.onclick = () => navigateTo('insights');
 
   const seeAllRenewals = document.getElementById('home-see-all-renewals');
   if (seeAllRenewals) seeAllRenewals.onclick = () => navigateTo('subscriptions');
@@ -418,6 +481,9 @@ function attachScreenListeners() {
   const fabAdd = document.getElementById('fab-add-sub');
   if (fabAdd) fabAdd.onclick = openAddSubscriptionModal;
 
+  const subsHeaderAdd = document.getElementById('subs-header-add-btn');
+  if (subsHeaderAdd) subsHeaderAdd.onclick = openAddSubscriptionModal;
+
   const runAnalysisBtn = document.getElementById('subs-run-analysis-btn');
   if (runAnalysisBtn) runAnalysisBtn.onclick = () => navigateTo('optimize');
 
@@ -433,10 +499,33 @@ function attachScreenListeners() {
     };
   }
 
-  const detailDelete = document.getElementById('detail-delete-btn');
-  if (detailDelete) {
-    detailDelete.onclick = async () => {
-      if (confirm('Delete this subscription from Trackey?')) {
+  // 1. Continue Action: Keep active & return to subscription list
+  const detailContinue = document.getElementById('detail-continue-btn');
+  if (detailContinue) {
+    detailContinue.onclick = () => {
+      const sub = state.subscriptions.find(s => s.id === state.selectedSubId);
+      const subName = sub ? sub.name : 'Subscription';
+      navigateTo('subscriptions');
+    };
+  }
+
+  // 2. Pause Action: Pause active subscription
+  const detailPause = document.getElementById('detail-pause-btn');
+  if (detailPause) {
+    detailPause.onclick = () => {
+      const sub = state.subscriptions.find(s => s.id === state.selectedSubId);
+      const subName = sub ? sub.name : 'Subscription';
+      alert(`Pause request placed for ${subName}. Trackey will hold your renewal reminders.`);
+    };
+  }
+
+  // 3. Cancel Action: Cancel / delete subscription from active tracker
+  const detailCancel = document.getElementById('detail-cancel-btn') || document.getElementById('detail-delete-btn');
+  if (detailCancel) {
+    detailCancel.onclick = async () => {
+      const sub = state.subscriptions.find(s => s.id === state.selectedSubId);
+      const subName = sub ? sub.name : 'this';
+      if (confirm(`Cancel and remove ${subName} subscription from Trackey?`)) {
         try {
           await api.deleteSubscription(state.selectedSubId);
           state.subscriptions = state.subscriptions.filter(s => s.id !== state.selectedSubId);
@@ -444,16 +533,9 @@ function attachScreenListeners() {
           loadOptimizer();
           navigateTo('subscriptions');
         } catch (err) {
-          alert('Delete failed: ' + err.message);
+          alert('Cancellation failed: ' + err.message);
         }
       }
-    };
-  }
-
-  const detailPause = document.getElementById('detail-pause-btn');
-  if (detailPause) {
-    detailPause.onclick = () => {
-      alert('Subscription pause instruction recorded in Trackey.');
     };
   }
 
@@ -473,6 +555,8 @@ function attachScreenListeners() {
   document.querySelectorAll('[data-insights-period]').forEach(p => {
     p.onclick = () => {
       const period = p.getAttribute('data-insights-period');
+      const container = document.getElementById('insights-container');
+      if (container) container.classList.add('chart-refreshing');
       loadInsights(period);
     };
   });
@@ -654,14 +738,26 @@ function attachScreenListeners() {
     };
   });
 
+  // Re-Analyze with AI Button
+  const reanalyzeBtn = document.getElementById('opt-reanalyze-ai-btn');
+  if (reanalyzeBtn) {
+    reanalyzeBtn.onclick = async () => {
+      reanalyzeBtn.innerHTML = 'Analyzing...';
+      reanalyzeBtn.style.opacity = '0.7';
+      await loadOptimizer(state.user.monthlyBudget, true);
+      renderApp();
+    };
+  }
+
   // Step 1: Overview
   const saveBudgetBtn = document.getElementById('opt-save-budget-btn');
   if (saveBudgetBtn) {
-    saveBudgetBtn.onclick = () => {
+    saveBudgetBtn.onclick = async () => {
       const input = document.getElementById('opt-budget-input');
       const val = parseFloat(input.value) || 1000;
       state.user.monthlyBudget = val;
-      api.updateProfile({ ...state.user, monthlyBudget: val });
+      await api.updateProfile({ ...state.user, monthlyBudget: val });
+      await loadOptimizer(val, true);
       renderApp();
     };
   }
@@ -967,6 +1063,27 @@ function attachScreenListeners() {
         await api.updateProfile(state.user);
       };
     }
+  });
+
+  // Setup subtle scroll reveal for cards & sections
+  setupScrollObserver();
+}
+
+function setupScrollObserver() {
+  if (!('IntersectionObserver' in window)) return;
+  const elements = document.querySelectorAll('.opt-card, .pcard, .insights-card, .summary-metric-card, .sub-card-enhanced, .renewal-card, .money-leak-card, .value-item-row');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('revealed');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.05, rootMargin: '0px 0px -10px 0px' });
+
+  elements.forEach(el => {
+    el.classList.add('reveal-on-scroll');
+    observer.observe(el);
   });
 }
 

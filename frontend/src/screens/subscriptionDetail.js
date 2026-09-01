@@ -75,9 +75,9 @@ export function renderSubscriptionDetailScreen(sub) {
 
       <!-- Action Buttons -->
       <div class="detail-actions">
-        <button class="d-btn ghost" id="detail-compare-btn">Compare</button>
-        ${sub.pauseSupported ? '<button class="d-btn primary" id="detail-pause-btn">Pause</button>' : ''}
-        <button class="d-btn danger" id="detail-delete-btn">Delete</button>
+        <button class="d-btn primary" id="detail-continue-btn">Continue</button>
+        <button class="d-btn ghost" id="detail-pause-btn">Pause</button>
+        <button class="d-btn danger" id="detail-cancel-btn">Cancel</button>
       </div>
     </div>
   `;

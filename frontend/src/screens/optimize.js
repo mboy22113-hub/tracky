@@ -4,18 +4,20 @@ import { UPCOMING_RELEASES } from '../data/recommendations.js';
 
 export function renderOptimizeScreen(state) {
   const currentStep = state.optimizerStep || 1;
-  const { user = {}, wishlist = [], movies = [], subscriptions = [] } = state;
+  const { user = {}, wishlist = [], movies = [], subscriptions = [], optimizer = null } = state;
 
   const paidSubs = subscriptions.filter(s => !s.free);
   const totalCurrentSpend = paidSubs.reduce((acc, s) => acc + (s.price || 0), 0);
   const lowUsageSubs = subscriptions.filter(s => s.status === 'low' || (s.usedDays !== undefined && s.usedDays <= 4 && s.price > 0));
 
-  // Current values
-  const currentSpend = totalCurrentSpend || 1984;
+  // Dynamic values derived from OpenAI optimizer or state
+  const currentSpend = optimizer?.current_monthly_spending ?? (totalCurrentSpend || 1984);
   const budgetVal = user.monthlyBudget || 1000;
-  const savingsVal = 699;
-  const optimizedSpend = 1285;
+  const savingsVal = optimizer?.total_potential_monthly_saving ?? 699;
+  const yearlySavingsVal = optimizer?.total_potential_yearly_saving ?? (savingsVal * 12);
+  const optimizedSpend = optimizer?.optimized_monthly_spending ?? Math.max(0, currentSpend - savingsVal);
   const overBudgetAmt = Math.max(0, currentSpend - budgetVal);
+  const aiEngineName = optimizer?.ai_engine_used || 'OpenAI Intelligence';
 
   const wishlistSet = new Set((wishlist || []).map(w => w.content_id || w.id));
 
@@ -30,10 +32,20 @@ export function renderOptimizeScreen(state) {
 
   return `
     <div class="scroll">
-      <!-- Optimizer Hero -->
-      <div class="opt-hero">
-        <h1>Subscription Optimizer</h1>
-        <p>AI-guided step-by-step portfolio restructuring</p>
+      <!-- Optimizer Hero with AI Intelligence Badge -->
+      <div class="opt-hero" style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <h1>Subscription Optimizer</h1>
+          <button id="opt-reanalyze-ai-btn" class="ghost-cta" style="font-size:11px;padding:4px 9px;border-radius:8px;background:var(--primary-soft);color:var(--primary);border:1px solid rgba(47,111,237,0.25);font-weight:700;display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Re-Analyze AI
+          </button>
+        </div>
+        <p style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);">
+          <span>AI-guided step-by-step portfolio restructuring</span>
+          <span style="display:inline-block;width:3px;height:3px;border-radius:50%;background:var(--muted);"></span>
+          <span style="color:var(--primary);font-weight:700;">⚡ ${aiEngineName}</span>
+        </p>
       </div>
 
       <!-- Top Horizontal Step Navigation -->
@@ -63,12 +75,14 @@ export function renderOptimizeScreen(state) {
         currentSpend,
         budgetVal,
         savingsVal,
+        yearlySavingsVal,
         optimizedSpend,
         overBudgetAmt,
         subscriptions,
         lowUsageSubs,
         wishlistSet,
         movies,
+        optimizer,
         state
       })}
     </div>
@@ -95,15 +109,25 @@ function renderActiveSection(step, ctx) {
 /* ==========================================================================
    SECTION 1 — CURRENT PORTFOLIO / OVERVIEW
    ========================================================================== */
-function renderSection1Overview({ currentSpend, budgetVal, savingsVal, overBudgetAmt, subscriptions, lowUsageSubs }) {
+function renderSection1Overview({ currentSpend, budgetVal, savingsVal, yearlySavingsVal, overBudgetAmt, subscriptions, lowUsageSubs, optimizer }) {
   const activeCount = subscriptions.length || 9;
-  const lowCount = lowUsageSubs.length || 2;
+  const attentionCount = optimizer?.attention_items?.length || lowUsageSubs.length || 3;
+  const summaryText = optimizer?.summary || `Your subscription portfolio spends ₹${currentSpend}/mo across ${activeCount} services. Reviewing low-usage services and overlapping catalogs can recover ₹${savingsVal}/mo (₹${yearlySavingsVal}/year).`;
 
   return `
     <div class="opt-section-wrapper" id="opt-section-1">
       <div class="opt-card glass">
         <h3>Current Portfolio</h3>
         <p style="font-size:12px;color:var(--muted);margin-top:2px;">Real-time active subscription metrics and budget constraints</p>
+
+        <!-- AI Executive Summary Callout -->
+        <div style="margin-top:12px;padding:12px 14px;background:var(--primary-soft);border:1px solid rgba(47,111,237,0.2);border-radius:12px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            <span style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;">AI Optimizer Executive Summary</span>
+          </div>
+          <p style="font-size:12px;color:var(--navy);line-height:1.45;margin:0;">${summaryText}</p>
+        </div>
 
         <!-- 4 Summary Metric Cards -->
         <div class="insight-summary" style="margin-top:14px;padding:0;background:none;border:none;box-shadow:none;">
@@ -116,8 +140,8 @@ function renderSection1Overview({ currentSpend, budgetVal, savingsVal, overBudge
             <div class="insight-summary-value" style="font-size:18px;font-weight:800;color:var(--navy);margin-top:4px;">${activeCount}</div>
           </div>
           <div class="insight-summary-item" style="background:var(--white);padding:14px 12px;border:1px solid var(--line);border-radius:14px;">
-            <div class="insight-summary-label">Low-Usage Flags</div>
-            <div class="insight-summary-value warn" style="font-size:18px;font-weight:800;margin-top:4px;">${lowCount}</div>
+            <div class="insight-summary-label">Attention Alerts</div>
+            <div class="insight-summary-value warn" style="font-size:18px;font-weight:800;margin-top:4px;">${attentionCount}</div>
           </div>
           <div class="insight-summary-item" style="background:var(--white);padding:14px 12px;border:1px solid var(--line);border-radius:14px;">
             <div class="insight-summary-label">Potential Savings</div>
@@ -137,11 +161,11 @@ function renderSection1Overview({ currentSpend, budgetVal, savingsVal, overBudge
             <button class="budget-save-btn" id="opt-save-budget-btn">Update</button>
           </div>
 
-          <!-- Simple Budget Status Message -->
+          <!-- Dynamic Budget Status Message -->
           <div class="budget-status ${currentSpend > budgetVal ? 'over' : 'under'}" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:${currentSpend > budgetVal ? 'var(--danger-soft)' : 'var(--success-soft)'};">
             ${currentSpend > budgetVal 
-              ? `⚠️ Current spending is ₹${overBudgetAmt} over your target budget.` 
-              : `✨ Current spending is ₹${budgetVal - currentSpend} within your monthly budget.`}
+              ? `⚠️ Current spending is ₹${overBudgetAmt} over your target budget of ₹${budgetVal}/mo.` 
+              : `✨ Current spending is ₹${budgetVal - currentSpend} within your monthly budget of ₹${budgetVal}/mo.`}
           </div>
         </div>
       </div>
@@ -159,99 +183,97 @@ function renderSection1Overview({ currentSpend, budgetVal, savingsVal, overBudge
 /* ==========================================================================
    SECTION 2 — ITEMS NEEDING ATTENTION
    ========================================================================== */
-function renderSection2Attention({ subscriptions }) {
-  const netflixSub = subscriptions.find(s => s.id === 'netflix') || { id: 'netflix', name: 'Netflix', price: 199, usedDays: 2 };
-  const hotstarSub = subscriptions.find(s => s.id === 'jiohotstar') || { id: 'jiohotstar', name: 'JioHotstar', price: 149, usedDays: 6 };
-  const canvaSub = subscriptions.find(s => s.id === 'canva') || { id: 'canva', name: 'Canva', price: 500, usedDays: 3 };
-
-  const logoNetflix = getServiceLogo('Netflix', '#E50914');
-  const logoHotstar = getServiceLogo('JioHotstar', '#0C1B33');
-  const logoCanva = getServiceLogo('Canva', '#00C4CC');
+function renderSection2Attention({ subscriptions, optimizer }) {
+  const attentionItems = optimizer?.attention_items && optimizer.attention_items.length > 0
+    ? optimizer.attention_items
+    : [
+        {
+          id: 'netflix',
+          subscription_id: 'netflix',
+          name: 'Netflix',
+          price: 199,
+          badge: 'Renewal in 3 days',
+          severity_tag: 'leakreview',
+          reason: 'Renewal in 3 days + Low usage (Used 2 days this month)',
+          icon_emoji: '🍿'
+        },
+        {
+          id: 'jiohotstar',
+          subscription_id: 'jiohotstar',
+          name: 'JioHotstar',
+          price: 149,
+          badge: 'Upcoming renewal',
+          severity_tag: 'review',
+          reason: 'Moderate usage with renewal scheduled in 6 days',
+          icon_emoji: '🏏'
+        },
+        {
+          id: 'canva',
+          subscription_id: 'canva',
+          name: 'Canva',
+          price: 500,
+          badge: 'Low usage',
+          severity_tag: 'leakreview',
+          reason: 'Low usage — used only 3 days this month (₹500/mo)',
+          icon_emoji: '🎨'
+        },
+        {
+          id: 'ghost',
+          subscription_id: 'primevideo',
+          name: 'Ghost App: Prime Video',
+          price: 299,
+          badge: 'Action Needed',
+          severity_tag: 'leakreview',
+          reason: 'App deleted from your devices, but subscription is still actively billing ₹299/mo.',
+          icon_emoji: '👻'
+        },
+        {
+          id: 'trial',
+          subscription_id: 'canva',
+          name: 'Free Trial: Canva Pro',
+          price: 500,
+          badge: 'Trial Ending',
+          severity_tag: 'review',
+          reason: 'Canva Pro trial ends in 2 days. Will automatically charge ₹500/month.',
+          icon_emoji: '🎁'
+        }
+      ];
 
   return `
     <div class="opt-section-wrapper" id="opt-section-2">
       <div class="opt-card glass">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
           <h3>Items Needing Attention</h3>
-          <span class="severity-tag leak"><div class="dot"></div>5 Alerts</span>
+          <span class="severity-tag leak"><div class="dot"></div>${attentionItems.length} Alerts</span>
         </div>
-        <p style="font-size:12px;color:var(--muted);">Priority review for upcoming renewals, low usage, ghost apps & trials</p>
+        <p style="font-size:12px;color:var(--muted);">Priority AI review for upcoming renewals, low usage, ghost apps & trials</p>
 
         <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
-          <!-- Item 1: Netflix -->
-          <div class="attention-item" id="attention-card-netflix">
-            <div class="sub-logo-wrap" style="width:38px;height:38px;">
-              ${logoNetflix}
-            </div>
-            <div class="attention-body">
-              <div class="attention-title">
-                ${netflixSub.name}
-                <span class="action-tag leakreview" style="font-size:9.5px;">Renewal in 3 days</span>
-              </div>
-              <div class="attention-reason">Renewal in 3 days + Low usage (Used 2 days this month)</div>
-            </div>
-            <button class="attention-btn" data-sub-id="netflix">Review →</button>
-          </div>
+          ${attentionItems.map(item => {
+            const sub = subscriptions.find(s => s.id === item.subscription_id);
+            const logo = getServiceLogo(sub?.name || item.name, sub?.color || '#2F6FED');
+            const isGhostOrTrial = item.type === 'ghost' || item.type === 'trial' || item.id.includes('ghost') || item.id.includes('trial');
+            const isDanger = item.severity_tag === 'leakreview' || item.type === 'ghost';
 
-          <!-- Item 2: JioHotstar -->
-          <div class="attention-item" id="attention-card-jiohotstar">
-            <div class="sub-logo-wrap" style="width:38px;height:38px;">
-              ${logoHotstar}
-            </div>
-            <div class="attention-body">
-              <div class="attention-title">
-                ${hotstarSub.name}
-                <span class="action-tag review" style="font-size:9.5px;">Upcoming renewal</span>
+            return `
+              <div class="attention-item" id="attention-card-${item.id}" 
+                   style="${isGhostOrTrial ? `border:1.5px dashed ${isDanger ? 'rgba(224,93,93,0.5)' : 'rgba(224,138,44,0.5)'};background:${isDanger ? 'rgba(254,242,242,0.6)' : 'rgba(254,248,235,0.6)'};` : ''}">
+                <div class="sub-logo-wrap" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+                  ${isGhostOrTrial 
+                    ? `<span style="font-size:20px;">${item.icon_emoji || (isDanger ? '👻' : '🎁')}</span>` 
+                    : logo}
+                </div>
+                <div class="attention-body">
+                  <div class="attention-title" style="${isDanger ? 'color:var(--danger);' : ''}">
+                    ${item.name}
+                    <span class="action-tag ${item.severity_tag || 'leakreview'}" style="font-size:9.5px;">${item.badge}</span>
+                  </div>
+                  <div class="attention-reason">${item.reason}</div>
+                </div>
+                <button class="attention-btn" style="${isDanger ? 'color:var(--danger);' : ''}" data-sub-id="${item.subscription_id || 'netflix'}">Review →</button>
               </div>
-              <div class="attention-reason">Moderate usage with renewal in 6 days</div>
-            </div>
-            <button class="attention-btn" data-sub-id="jiohotstar">Review →</button>
-          </div>
-
-          <!-- Item 3: Canva -->
-          <div class="attention-item" id="attention-card-canva">
-            <div class="sub-logo-wrap" style="width:38px;height:38px;">
-              ${logoCanva}
-            </div>
-            <div class="attention-body">
-              <div class="attention-title">
-                ${canvaSub.name}
-                <span class="action-tag leakreview" style="font-size:9.5px;">Low usage</span>
-              </div>
-              <div class="attention-reason">Low usage — used only 3 days this month (₹500/mo)</div>
-            </div>
-            <button class="attention-btn" data-sub-id="canva">Review →</button>
-          </div>
-
-          <!-- Item 4: Ghost Subscription Alert -->
-          <div class="attention-item" style="border:1.5px dashed rgba(224,93,93,0.5);background:rgba(254,242,242,0.6);" id="attention-card-ghost">
-            <div style="width:38px;height:38px;border-radius:12px;background:var(--danger-soft);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
-              👻
-            </div>
-            <div class="attention-body">
-              <div class="attention-title" style="color:var(--danger);">
-                Ghost Subscription
-                <span class="action-tag leakreview">Action Needed</span>
-              </div>
-              <div class="attention-reason">App deleted from your devices, but subscription is still actively billing ₹299/mo.</div>
-            </div>
-            <button class="attention-btn" style="color:var(--danger);" data-sub-id="primevideo">Review →</button>
-          </div>
-
-          <!-- Item 5: Free Trial Alert -->
-          <div class="attention-item" style="border:1.5px dashed rgba(224,138,44,0.5);background:rgba(254,248,235,0.6);" id="attention-card-trial">
-            <div style="width:38px;height:38px;border-radius:12px;background:var(--amber-soft);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
-              🎁
-            </div>
-            <div class="attention-body">
-              <div class="attention-title" style="color:var(--amber);">
-                Free Trial Alert
-                <span class="action-tag review">Trial Ending</span>
-              </div>
-              <div class="attention-reason">Canva Pro trial ends in 2 days. Will automatically charge ₹500/month.</div>
-            </div>
-            <button class="attention-btn" style="color:var(--amber);" data-sub-id="canva">Review →</button>
-          </div>
+            `;
+          }).join('')}
         </div>
       </div>
 
@@ -271,40 +293,83 @@ function renderSection2Attention({ subscriptions }) {
 /* ==========================================================================
    SECTION 3 — AI OPTIMIZED PLAN
    ========================================================================== */
-function renderSection3AiPlan({ currentSpend, savingsVal, optimizedSpend, subscriptions, state }) {
+function renderSection3AiPlan({ currentSpend, savingsVal, yearlySavingsVal, optimizedSpend, subscriptions, optimizer, state }) {
   const isPlanApplied = state.planApplied || false;
 
-  const spotifySub = subscriptions.find(s => s.id === 'spotify') || { name: 'Spotify', price: 119 };
-  const primeSub = subscriptions.find(s => s.id === 'primevideo') || { name: 'Prime Video', price: 299 };
-  const netflixSub = subscriptions.find(s => s.id === 'netflix') || { name: 'Netflix', price: 199 };
-  const canvaSub = subscriptions.find(s => s.id === 'canva') || { name: 'Canva', price: 500 };
+  const factors = optimizer?.factors_analyzed || [
+    "Spending vs Budget",
+    "Usage Frequency",
+    "Last Used Days",
+    "Cost per Usage",
+    "Ghost Subscriptions",
+    "Free Trials Ending",
+    "User Interests",
+    "Upcoming OTT Content"
+  ];
 
-  const logoSpotify = getServiceLogo('Spotify', '#1DB954');
-  const logoPrime = getServiceLogo('Prime Video', '#00A8E1');
-  const logoNetflix = getServiceLogo('Netflix', '#E50914');
-  const logoCanva = getServiceLogo('Canva', '#00C4CC');
+  const recommendations = optimizer?.recommendations && optimizer.recommendations.length > 0
+    ? optimizer.recommendations
+    : [
+        {
+          subscription: 'Spotify',
+          subscription_id: 'spotify',
+          action: 'keep',
+          action_label: 'KEEP',
+          tag_class: 'keep',
+          reason: 'High active usage (24 days) and strong alignment with your daily routines.',
+          meta: 'High usage (24 days) · Score: 9.1/10',
+          current_monthly_price: 119,
+          estimated_monthly_saving: 0
+        },
+        {
+          subscription: 'Prime Video',
+          subscription_id: 'primevideo',
+          action: 'switch',
+          action_label: 'SWITCH / SUBSCRIBE',
+          tag_class: 'info',
+          reason: '4 upcoming releases next month match your sci-fi and action interests.',
+          meta: 'Matches 4 upcoming releases · Score: 8.9/10',
+          current_monthly_price: 299,
+          estimated_monthly_saving: 0
+        },
+        {
+          subscription: 'Netflix',
+          subscription_id: 'netflix',
+          action: 'pause',
+          action_label: 'PAUSE / CANCEL',
+          tag_class: 'leakreview',
+          reason: 'You haven\'t used Netflix recently (2 days active), while Prime Video releases align better. Pausing saves ₹199/mo.',
+          meta: 'Used 2 days · Save ₹199/mo',
+          current_monthly_price: 199,
+          estimated_monthly_saving: 199
+        },
+        {
+          subscription: 'Canva',
+          subscription_id: 'canva',
+          action: 'cancel',
+          action_label: 'REVIEW / CANCEL',
+          tag_class: 'review',
+          reason: 'Used only 3 days this month. Free tier covers standard graphics without recurring fees.',
+          meta: 'Used 3 days · Save ₹500/mo',
+          current_monthly_price: 500,
+          estimated_monthly_saving: 500
+        }
+      ];
 
   return `
     <div class="opt-section-wrapper" id="opt-section-3">
       <div class="opt-card glass">
         <h3>Your Optimized Plan</h3>
-        <p style="font-size:12px;color:var(--muted);">AI-rebalanced portfolio maximizing usage return and saving ₹${savingsVal}/mo</p>
+        <p style="font-size:12px;color:var(--muted);">AI-rebalanced portfolio maximizing usage return and saving ₹${savingsVal}/mo (₹${yearlySavingsVal}/year)</p>
 
         <!-- AI Analyzed Factors Chips -->
         <div class="opt-ai-factors-box">
           <div class="opt-ai-factors-title">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-            AI Analyzed Parameters
+            AI Analyzed Parameters (${factors.length})
           </div>
           <div class="opt-ai-factors-list">
-            <span class="opt-factor-chip">Spending vs Budget</span>
-            <span class="opt-factor-chip">Usage Frequency</span>
-            <span class="opt-factor-chip">Last Used Days</span>
-            <span class="opt-factor-chip">Cost per Usage</span>
-            <span class="opt-factor-chip">Ghost Subscriptions</span>
-            <span class="opt-factor-chip">Free Trials Ending</span>
-            <span class="opt-factor-chip">User Interests</span>
-            <span class="opt-factor-chip">Upcoming OTT Content</span>
+            ${factors.map(f => `<span class="opt-factor-chip">${f}</span>`).join('')}
           </div>
         </div>
 
@@ -313,7 +378,7 @@ function renderSection3AiPlan({ currentSpend, savingsVal, optimizedSpend, subscr
           <div class="portfolio-col">
             <div class="portfolio-col-label">Current Monthly Cost</div>
             <div class="portfolio-col-amt">₹${currentSpend}<span style="font-size:10px;font-weight:500;color:var(--muted);">/mo</span></div>
-            <div class="portfolio-col-count">9 active subscriptions</div>
+            <div class="portfolio-col-count">${subscriptions.length} active subscriptions</div>
           </div>
           <div class="portfolio-arrow">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
@@ -335,83 +400,37 @@ function renderSection3AiPlan({ currentSpend, savingsVal, optimizedSpend, subscr
           </div>
         ` : ''}
 
-        <!-- Action Items List -->
+        <!-- Dynamic Action Items List -->
         <div style="margin-top:18px;">
-          <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:10px;">Recommended Action Plan:</div>
+          <div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:10px;">Recommended Action Plan (${recommendations.length} Services):</div>
 
-          <!-- Action 1: KEEP Spotify -->
-          <div class="opt-row" id="plan-item-spotify">
-            <div class="sub-logo-wrap" style="width:36px;height:36px;">
-              ${logoSpotify}
-            </div>
-            <div class="opt-row-body">
-              <div class="opt-row-name">
-                ${spotifySub.name}
-                <span class="action-tag keep">KEEP</span>
-              </div>
-              <div class="opt-row-meta">High usage (24 days) · Score: 9.1/10</div>
-              <div class="opt-row-reason">High usage and matches your podcast/music preferences.</div>
-            </div>
-            <div class="opt-row-right">
-              <div class="opt-row-price">₹${Math.round(spotifySub.price)}</div>
-            </div>
-          </div>
+          ${recommendations.map(rec => {
+            const sub = subscriptions.find(s => s.id === rec.subscription_id || s.name.toLowerCase() === rec.subscription.toLowerCase());
+            const logo = getServiceLogo(rec.subscription, sub?.color || '#2F6FED');
+            const hasReviewAction = rec.action === 'pause' || rec.action === 'cancel' || rec.action === 'review';
 
-          <!-- Action 2: SWITCH / SUBSCRIBE Prime Video -->
-          <div class="opt-row" id="plan-item-prime">
-            <div class="sub-logo-wrap" style="width:36px;height:36px;">
-              ${logoPrime}
-            </div>
-            <div class="opt-row-body">
-              <div class="opt-row-name">
-                ${primeSub.name}
-                <span class="action-tag info">SWITCH / SUBSCRIBE</span>
+            return `
+              <div class="opt-row" id="plan-item-${rec.subscription_id}">
+                <div class="sub-logo-wrap" style="width:36px;height:36px;">
+                  ${logo}
+                </div>
+                <div class="opt-row-body">
+                  <div class="opt-row-name">
+                    ${rec.subscription}
+                    <span class="action-tag ${rec.tag_class || 'keep'}">${rec.action_label || rec.action.toUpperCase()}</span>
+                  </div>
+                  <div class="opt-row-meta">${rec.meta || `Price: ₹${rec.current_monthly_price}/mo`}</div>
+                  <div class="opt-row-reason">${rec.reason}</div>
+                </div>
+                <div class="opt-row-right">
+                  <div class="opt-row-price">₹${Math.round(rec.current_monthly_price || sub?.price || 0)}</div>
+                  ${hasReviewAction ? `
+                    <button class="opt-action-btn" data-sub-id="${rec.subscription_id}">Review</button>
+                  ` : ''}
+                </div>
               </div>
-              <div class="opt-row-meta">Matches 4 upcoming releases · Score: 8.9/10</div>
-              <div class="opt-row-reason">Upcoming movies next month match your interests.</div>
-            </div>
-            <div class="opt-row-right">
-              <div class="opt-row-price">₹${Math.round(primeSub.price)}</div>
-            </div>
-          </div>
-
-          <!-- Action 3: PAUSE / CANCEL Netflix -->
-          <div class="opt-row" id="plan-item-netflix">
-            <div class="sub-logo-wrap" style="width:36px;height:36px;">
-              ${logoNetflix}
-            </div>
-            <div class="opt-row-body">
-              <div class="opt-row-name">
-                ${netflixSub.name}
-                <span class="action-tag leakreview">PAUSE / CANCEL</span>
-              </div>
-              <div class="opt-row-meta">Used 2 days · Save ₹199/mo</div>
-              <div class="opt-row-reason">Low usage and no highly relevant upcoming content.</div>
-            </div>
-            <div class="opt-row-right">
-              <div class="opt-row-price">₹${Math.round(netflixSub.price)}</div>
-              <button class="opt-action-btn" data-sub-id="netflix">Review</button>
-            </div>
-          </div>
-
-          <!-- Action 4: REVIEW Canva -->
-          <div class="opt-row" id="plan-item-canva">
-            <div class="sub-logo-wrap" style="width:36px;height:36px;">
-              ${logoCanva}
-            </div>
-            <div class="opt-row-body">
-              <div class="opt-row-name">
-                ${canvaSub.name}
-                <span class="action-tag review">REVIEW</span>
-              </div>
-              <div class="opt-row-meta">Used 3 days · Save ₹500/mo</div>
-              <div class="opt-row-reason">Used only 3 days this month.</div>
-            </div>
-            <div class="opt-row-right">
-              <div class="opt-row-price">₹${Math.round(canvaSub.price)}</div>
-              <button class="opt-action-btn" data-sub-id="canva">Review</button>
-            </div>
-          </div>
+            `;
+          }).join('')}
         </div>
 
         <!-- Primary CTA to Apply Plan -->
@@ -437,7 +456,7 @@ function renderSection3AiPlan({ currentSpend, savingsVal, optimizedSpend, subscr
 /* ==========================================================================
    SECTION 4 — FUTURE SUBSCRIPTION RECOMMENDATIONS
    ========================================================================== */
-function renderSection4Future({ wishlistSet, movies }) {
+function renderSection4Future({ wishlistSet, optimizer }) {
   const allReleases = (UPCOMING_RELEASES && UPCOMING_RELEASES.length > 0) ? UPCOMING_RELEASES : [
     {
       id: 'm_dune2',
@@ -501,7 +520,13 @@ function renderSection4Future({ wishlistSet, movies }) {
     }
   ];
 
-  const logoPrime = getServiceLogo('Prime Video', '#00A8E1');
+  const topPlatform = optimizer?.future_recommendations?.top_platform || 'Prime Video';
+  const topPrice = optimizer?.future_recommendations?.price || 299;
+  const headline = optimizer?.future_recommendations?.headline || '4 upcoming releases next month match your action, sci-fi and superhero interests.';
+  const verdict = optimizer?.future_recommendations?.verdict || 'Subscribe to Prime Video next month instead of renewing Netflix.';
+  const potentialSaving = optimizer?.future_recommendations?.potential_saving || 200;
+
+  const logoTop = getServiceLogo(topPlatform, '#00A8E1');
 
   return `
     <div class="opt-section-wrapper" id="opt-section-4">
@@ -513,18 +538,18 @@ function renderSection4Future({ wishlistSet, movies }) {
         <div class="future-card glass" style="margin-top:14px;background:var(--white);border:1.5px solid rgba(47,111,237,0.3);">
           <div class="future-card-head" style="align-items:center;">
             <div class="sub-logo-wrap" style="width:36px;height:36px;">
-              ${logoPrime}
+              ${logoTop}
             </div>
             <div>
-              <h3 style="font-size:15px;">Prime Video</h3>
-              <div style="font-size:11px;color:var(--muted);font-weight:600;">Estimated: ₹299 / month</div>
+              <h3 style="font-size:15px;">${topPlatform}</h3>
+              <div style="font-size:11px;color:var(--muted);font-weight:600;">Estimated: ₹${topPrice} / month</div>
             </div>
             <span class="future-badge recommend" style="margin-left:auto;">TOP RECOMMENDATION</span>
           </div>
 
           <!-- Interest Alignment Reason -->
           <div style="margin-top:12px;font-size:12.5px;color:var(--navy);font-weight:700;line-height:1.45;">
-            "4 upcoming releases next month match your action, sci-fi and superhero interests."
+            "${headline}"
           </div>
 
           <!-- Upcoming Release Posters Carousel with Real Visual Artworks -->
@@ -544,10 +569,10 @@ function renderSection4Future({ wishlistSet, movies }) {
           <div class="ai-verdict-card" style="margin-top:12px;padding:12px 14px;background:var(--primary-soft);border:none;border-radius:12px;">
             <div style="font-size:11px;font-weight:800;color:var(--primary);text-transform:uppercase;">AI Recommendation</div>
             <div style="font-size:12.5px;font-weight:700;color:var(--navy);margin-top:3px;">
-              Subscribe to Prime Video next month instead of renewing Netflix.
+              ${verdict}
             </div>
             <div style="font-size:11.5px;color:var(--success);font-weight:800;margin-top:4px;">
-              Potential saving: ₹200 / month
+              Potential saving: ₹${potentialSaving} / month
             </div>
           </div>
 
@@ -579,121 +604,98 @@ function renderSection4Future({ wishlistSet, movies }) {
 /* ==========================================================================
    SECTION 5 — SERVICE SWITCH RECOMMENDATIONS
    ========================================================================== */
-function renderSection5ServiceSwitch() {
+function renderSection5ServiceSwitch({ optimizer }) {
+  const switches = optimizer?.service_switches && optimizer.service_switches.length > 0
+    ? optimizer.service_switches
+    : [
+        {
+          current_service: "Spotify",
+          current_id: "spotify",
+          current_price: 119,
+          current_why: "High active daily commute & workout usage.",
+          recommended_service: "Apple Music",
+          recommended_id: "applemusic",
+          recommended_price: 99,
+          recommended_saving: 20,
+          recommended_why: "Spatial audio + Apple devices native Siri integration.",
+          match_pct: 95,
+          analyzed_factors: "Device ecosystem · Music usage · Podcasts · Lossless audio",
+          quote: "You use iPhone, AirPods and Mac. Apple Music provides better ecosystem integration and Lossless Audio."
+        },
+        {
+          current_service: "Netflix",
+          current_id: "netflix",
+          current_price: 199,
+          current_why: "Low viewing activity this billing cycle (2 days).",
+          recommended_service: "Prime Video",
+          recommended_id: "primevideo",
+          recommended_price: 299,
+          recommended_saving: 0,
+          recommended_why: "Includes fast shopping delivery + upcoming Dune 2 and Rings of Power S2.",
+          match_pct: 92,
+          analyzed_factors: "Content alignment · Monthly cost · Included perks",
+          quote: "Your Netflix usage dropped to 2 days while Prime Video has 4 major releases matching your sci-fi watchlist next month."
+        },
+        {
+          current_service: "Canva Pro",
+          current_id: "canva",
+          current_price: 500,
+          current_why: "Paying full pro tier for infrequent usage (3 days/mo).",
+          recommended_service: "Canva Free / Adobe Express",
+          recommended_id: "canva_free",
+          recommended_price: 0,
+          recommended_saving: 500,
+          recommended_why: "100% adequate for 3-day lightweight graphics.",
+          match_pct: 88,
+          analyzed_factors: "Monthly usage frequency (3 days/mo)",
+          quote: "You create graphics on only 3 days per month. The free tier covers all your export requirements without paying ₹500/mo."
+        }
+      ];
+
   return `
     <div class="opt-section-wrapper" id="opt-section-5">
       <div class="opt-card glass">
         <h3>Better Service for You</h3>
         <p style="font-size:12px;color:var(--muted);">Personalized comparisons and ecosystem alignment based on actual usage</p>
 
-        <!-- Switch Card 1: Spotify vs Apple Music -->
-        <div class="service-switch-card">
-          <div class="switch-header">
-            <div class="switch-pair-badge">
-              <span>Spotify</span>
-              <span style="color:var(--primary);">→</span>
-              <span>Apple Music</span>
-            </div>
-            <span class="switch-match-pill">95% Match</span>
-          </div>
-
-          <div class="switch-factors-bar">
-            <span>Analyzed:</span> Device ecosystem · Music usage · Podcasts · Lossless audio
-          </div>
-
-          <div class="switch-quote-box">
-            "You use iPhone, AirPods and Mac. Apple Music provides better ecosystem integration and Lossless Audio."
-            <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Alternative: If podcast discovery is primary, Spotify remains top choice.</div>
-          </div>
-
-          <div class="switch-details-grid">
-            <div class="switch-detail-box">
-              <div class="switch-detail-label">Current Service</div>
-              <div class="switch-detail-name">Spotify</div>
-              <div class="switch-detail-price">₹119 / month</div>
-              <div class="switch-why">High active daily commute & workout usage.</div>
+        ${switches.map(sw => `
+          <div class="service-switch-card">
+            <div class="switch-header">
+              <div class="switch-pair-badge">
+                <span>${sw.current_service}</span>
+                <span style="color:var(--primary);">→</span>
+                <span>${sw.recommended_service}</span>
+              </div>
+              <span class="switch-match-pill" style="${sw.match_pct < 90 ? 'color:var(--success);background:var(--success-soft);' : ''}">${sw.match_pct}% Match</span>
             </div>
 
-            <div class="switch-detail-box recommended">
-              <div class="switch-detail-label" style="color:var(--primary);">Recommended</div>
-              <div class="switch-detail-name">Apple Music</div>
-              <div class="switch-detail-price" style="color:var(--success);">₹99 / month (Save ₹20)</div>
-              <div class="switch-why">Spatial audio + Apple devices native Siri integration.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Switch Card 2: Netflix vs Prime Video -->
-        <div class="service-switch-card">
-          <div class="switch-header">
-            <div class="switch-pair-badge">
-              <span>Netflix</span>
-              <span style="color:var(--primary);">→</span>
-              <span>Prime Video</span>
-            </div>
-            <span class="switch-match-pill">92% Match</span>
-          </div>
-
-          <div class="switch-factors-bar">
-            <span>Analyzed:</span> Content alignment · Monthly cost · Included perks
-          </div>
-
-          <div class="switch-quote-box">
-            "Your Netflix usage dropped to 2 days while Prime Video has 4 major releases matching your sci-fi watchlist next month."
-          </div>
-
-          <div class="switch-details-grid">
-            <div class="switch-detail-box">
-              <div class="switch-detail-label">Current Service</div>
-              <div class="switch-detail-name">Netflix</div>
-              <div class="switch-detail-price">₹199 / month</div>
-              <div class="switch-why">Low viewing activity this billing cycle.</div>
+            <div class="switch-factors-bar">
+              <span>Analyzed:</span> ${sw.analyzed_factors}
             </div>
 
-            <div class="switch-detail-box recommended">
-              <div class="switch-detail-label" style="color:var(--primary);">Recommended</div>
-              <div class="switch-detail-name">Prime Video</div>
-              <div class="switch-detail-price">₹299 / month</div>
-              <div class="switch-why">Includes fast shopping delivery + upcoming Dune 2.</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Switch Card 3: Canva Pro vs Canva Free -->
-        <div class="service-switch-card">
-          <div class="switch-header">
-            <div class="switch-pair-badge">
-              <span>Canva Pro</span>
-              <span style="color:var(--primary);">→</span>
-              <span>Canva Free / Adobe Express</span>
-            </div>
-            <span class="switch-match-pill" style="color:var(--success);background:var(--success-soft);">88% Match</span>
-          </div>
-
-          <div class="switch-factors-bar">
-            <span>Analyzed:</span> Monthly usage frequency (3 days/mo)
-          </div>
-
-          <div class="switch-quote-box">
-            "You create graphics on only 3 days per month. The free tier covers all your export requirements without paying ₹500/mo."
-          </div>
-
-          <div class="switch-details-grid">
-            <div class="switch-detail-box">
-              <div class="switch-detail-label">Current Service</div>
-              <div class="switch-detail-name">Canva Pro</div>
-              <div class="switch-detail-price">₹500 / month</div>
-              <div class="switch-why">Paying full pro tier for infrequent usage.</div>
+            <div class="switch-quote-box">
+              "${sw.quote}"
             </div>
 
-            <div class="switch-detail-box recommended">
-              <div class="switch-detail-label" style="color:var(--success);">Recommended</div>
-              <div class="switch-detail-name">Free Tier</div>
-              <div class="switch-detail-price" style="color:var(--success);">₹0 / month (Save ₹500)</div>
-              <div class="switch-why">100% adequate for 3-day lightweight graphics.</div>
+            <div class="switch-details-grid">
+              <div class="switch-detail-box">
+                <div class="switch-detail-label">Current Service</div>
+                <div class="switch-detail-name">${sw.current_service}</div>
+                <div class="switch-detail-price">₹${sw.current_price} / month</div>
+                <div class="switch-why">${sw.current_why}</div>
+              </div>
+
+              <div class="switch-detail-box recommended">
+                <div class="switch-detail-label" style="color:var(--primary);">Recommended</div>
+                <div class="switch-detail-name">${sw.recommended_service}</div>
+                <div class="switch-detail-price" style="color:var(--success);">
+                  ₹${sw.recommended_price} / month ${sw.recommended_saving > 0 ? `(Save ₹${sw.recommended_saving})` : ''}
+                </div>
+                <div class="switch-why">${sw.recommended_why}</div>
+              </div>
             </div>
           </div>
-        </div>
+        `).join('')}
       </div>
 
       <!-- Navigation Footer -->

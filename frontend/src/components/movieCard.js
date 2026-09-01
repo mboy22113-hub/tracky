@@ -11,7 +11,7 @@ export function renderMovieCard(movie, inWishlist = false) {
     <div class="movie-card" data-movie-id="${movie.id}">
       <div class="movie-poster">
         ${posterUrl ? `
-          <img src="${posterUrl}" alt="${movie.title}" class="movie-poster-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+          <img src="${posterUrl}" alt="${movie.title}" class="movie-poster-img lazy-fade" loading="lazy" referrerpolicy="no-referrer" onload="this.classList.add('loaded')" onerror="this.style.display='none'" />
         ` : ''}
         <div class="movie-poster-overlay"></div>
         
