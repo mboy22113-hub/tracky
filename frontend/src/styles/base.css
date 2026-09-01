@@ -28,34 +28,32 @@
 html,body{ height:100%; }
 body{
   font-family:'Inter', sans-serif;
-  background: linear-gradient(180deg,#EDF2FB 0%, #E3EAFA 100%);
-  display:flex; align-items:center; justify-content:center;
+  background: var(--bg);
   min-height:100vh;
-  padding:40px 16px;
+  margin:0;
+  padding:0;
   color:var(--navy);
+  overflow-x:hidden;
 }
 
 h1,h2,h3,.num,.brandname{ font-family:'Manrope', sans-serif; }
 
-/* Phone frame (presentation container) */
+/* Responsive app container */
 .phone{
   position:relative;
-  width:390px;
-  height:844px;
-  max-height:92vh;
+  width:100%;
+  height:100vh;
+  max-height:100vh;
   background:var(--bg);
-  border-radius:46px;
-  box-shadow: 0 40px 80px -30px rgba(20,35,80,0.45), 0 0 0 10px #0E1526, 0 0 0 12px #2a3550;
   overflow:hidden;
+  display:flex;
+  flex-direction:column;
 }
 .notch{
-  position:absolute; top:0; left:50%; transform:translateX(-50%);
-  width:120px; height:26px; background:#0E1526; border-radius:0 0 16px 16px; z-index:50;
+  display:none;
 }
 .statusbar{
-  position:absolute; top:0; left:0; right:0; height:46px;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0 26px; font-size:13px; font-weight:600; color:var(--navy); z-index:40;
+  display:none;
 }
 
 /* Splash */
@@ -120,8 +118,9 @@ h1,h2,h3,.num,.brandname{ font-family:'Manrope', sans-serif; }
 
 /* header */
 .app-header{
-  padding:56px 20px 4px 20px;
+  padding:14px 20px 10px 20px;
   display:flex; align-items:center; justify-content:space-between;
+  flex-shrink:0;
 }
 .brand{ display:flex; align-items:center; gap:8px; }
 .brand-mark{

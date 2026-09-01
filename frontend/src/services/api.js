@@ -13,6 +13,10 @@ import {
 // Safe in-memory store
 let subscriptionsState = [...INITIAL_SUBSCRIPTIONS];
 let userState = { ...INITIAL_USER };
+let wishlistState = [
+  { id: 'm_dune2', content_id: 'm_dune2', title: 'Dune: Part Two', poster_url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&q=80', platform: 'Prime Video' },
+  { id: 'm_squidgame2', content_id: 'm_squidgame2', title: 'Squid Game S2', poster_url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400&q=80', platform: 'Netflix' }
+];
 
 export const subscriptionService = {
   async getSubscriptions() {
@@ -217,18 +221,38 @@ export const api = {
   updateSubscription: subscriptionService.updateSubscription,
   pauseSubscription: subscriptionService.pauseSubscription,
   cancelSubscription: subscriptionService.cancelSubscription,
+  deleteSubscription: subscriptionService.cancelSubscription,
 
   getAvailableServices: comparisonService.getAvailableServices,
   getComparisonPresets: comparisonService.getComparisonPresets,
   compareServices: comparisonService.compareServices,
 
   getUpcomingReleases: recommendationService.getUpcomingReleases,
+  getUpcomingMovies: recommendationService.getUpcomingReleases,
   getStrategicActions: recommendationService.getStrategicActions,
   getOptimizerPlan: recommendationService.getOptimizerPlan,
+  getOptimizer: recommendationService.getOptimizerPlan,
+  getRecommendations: async () => recommendationService.getStrategicActions(),
+
+  getWishlist: async () => [...wishlistState],
+  addToWishlist: async (item) => {
+    const entry = { id: item.id || item.content_id || `w_${Date.now()}`, ...item };
+    wishlistState.push(entry);
+    return entry;
+  },
+  removeFromWishlist: async (contentId) => {
+    wishlistState = wishlistState.filter(w => w.content_id !== contentId && w.id !== contentId);
+    return { success: true };
+  },
 
   getInsights: insightsService.getInsights,
   getUser: async () => ({ ...userState }),
+  getProfile: async () => ({ ...userState }),
   updateUser: async (patch) => {
+    userState = { ...userState, ...patch };
+    return { ...userState };
+  },
+  updateProfile: async (patch) => {
     userState = { ...userState, ...patch };
     return { ...userState };
   }
