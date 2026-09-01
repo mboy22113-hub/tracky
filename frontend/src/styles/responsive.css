@@ -1,0 +1,18 @@
+/* Responsive adjustments for direct browser display or embed */
+@media (max-width: 480px) {
+  body {
+    padding: 0;
+    background: var(--bg);
+  }
+  .phone {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+  .notch {
+    display: none;
+  }
+}
