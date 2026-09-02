@@ -1,5 +1,5 @@
-import { Subscription, UserProfile, WishlistItem } from './types.js';
-import { DEFAULT_UPCOMING_CONTENT } from './data.js';
+import { Subscription, UserProfile, WishlistItem } from './types';
+import { DEFAULT_UPCOMING_CONTENT } from './data';
 
 export interface ToolExecutionContext {
   subscriptions: Subscription[];

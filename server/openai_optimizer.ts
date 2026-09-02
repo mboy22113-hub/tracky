@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { Subscription, UserProfile, WishlistItem } from "./types.js";
-import { DEFAULT_UPCOMING_CONTENT } from "./data.js";
-import { OPENAI_TOOLS_DEFINITIONS, executeOpenAiTool } from "./openai_tools.js";
+import { Subscription, UserProfile, WishlistItem } from "./types";
+import { DEFAULT_UPCOMING_CONTENT } from "./data";
+import { OPENAI_TOOLS_DEFINITIONS, executeOpenAiTool } from "./openai_tools";
 
 let openaiClient: OpenAI | null = null;
 let geminiClient: GoogleGenAI | null = null;

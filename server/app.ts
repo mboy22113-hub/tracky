@@ -1,9 +1,9 @@
 import express from "express";
-import { Subscription, UserProfile, WishlistItem } from "./types.js";
-import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data.js";
-import { compareOttServices, compareUniversalServices } from "./comparisons.js";
-import { getUpcomingMovies, getFutureRecommendations } from "./recommendations.js";
-import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer.js";
+import { Subscription, UserProfile, WishlistItem } from "./types";
+import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data";
+import { compareOttServices, compareUniversalServices } from "./comparisons";
+import { getUpcomingMovies, getFutureRecommendations } from "./recommendations";
+import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer";
 
 // In-Memory State Store
 let subscriptions: Subscription[] = JSON.parse(JSON.stringify(INITIAL_SUBSCRIPTIONS));

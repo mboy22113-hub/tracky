@@ -1,4 +1,4 @@
-import { Subscription, UserProfile } from './types.js';
+import { Subscription, UserProfile } from './types';
 
 export const OTT_PLATFORM_CATALOG: Record<string, any> = {
   netflix: {
