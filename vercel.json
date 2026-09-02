@@ -6,10 +6,6 @@
     "api/index.ts": {
       "includeFiles": "server/**",
       "maxDuration": 30
-    },
-    "api/index.js": {
-      "includeFiles": "server/**",
-      "maxDuration": 30
     }
   },
   "rewrites": [
