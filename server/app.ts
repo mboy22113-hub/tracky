@@ -1,9 +1,9 @@
 import express from "express";
-import { Subscription, UserProfile, WishlistItem } from "./types.ts";
-import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data.ts";
-import { compareOttServices, compareUniversalServices } from "./comparisons.ts";
-import { getUpcomingMovies, getFutureRecommendations } from "./recommendations.ts";
-import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer.ts";
+import { Subscription, UserProfile, WishlistItem } from "./types.js";
+import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data.js";
+import { compareOttServices, compareUniversalServices } from "./comparisons.js";
+import { getUpcomingMovies, getFutureRecommendations } from "./recommendations.js";
+import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer.js";
 
 // In-Memory State Store
 let subscriptions: Subscription[] = JSON.parse(JSON.stringify(INITIAL_SUBSCRIPTIONS));
@@ -12,21 +12,22 @@ let wishlist: WishlistItem[] = JSON.parse(JSON.stringify(INITIAL_WISHLIST));
 
 export function createApiApp() {
   const app = express();
-
   app.use(express.json());
 
+  const router = express.Router();
+
   // Profile API
-  app.get("/api/profile", (req, res) => {
+  router.get("/profile", (req, res) => {
     res.json(userProfile);
   });
 
-  app.put("/api/profile", (req, res) => {
+  router.put("/profile", (req, res) => {
     userProfile = { ...userProfile, ...req.body };
     res.json(userProfile);
   });
 
   // Subscriptions CRUD API
-  app.get("/api/subscriptions", (req, res) => {
+  router.get("/subscriptions", (req, res) => {
     const category = req.query.category as string;
     if (category && category !== "all") {
       res.json(subscriptions.filter(s => s.category === category));
@@ -35,7 +36,7 @@ export function createApiApp() {
     }
   });
 
-  app.post("/api/subscriptions", (req, res) => {
+  router.post("/subscriptions", (req, res) => {
     const newSub: Subscription = {
       id: req.body.id || `sub_${Date.now()}`,
       name: req.body.name || "Custom Subscription",
@@ -65,7 +66,7 @@ export function createApiApp() {
     res.json(newSub);
   });
 
-  app.get("/api/subscriptions/:id", (req, res) => {
+  router.get("/subscriptions/:id", (req, res) => {
     const sub = subscriptions.find(s => s.id === req.params.id);
     if (!sub) {
       return res.status(404).json({ error: "Subscription not found" });
@@ -73,7 +74,7 @@ export function createApiApp() {
     res.json(sub);
   });
 
-  app.put("/api/subscriptions/:id", (req, res) => {
+  router.put("/subscriptions/:id", (req, res) => {
     const index = subscriptions.findIndex(s => s.id === req.params.id);
     if (index === -1) {
       return res.status(404).json({ error: "Subscription not found" });
@@ -82,7 +83,7 @@ export function createApiApp() {
     res.json(subscriptions[index]);
   });
 
-  app.delete("/api/subscriptions/:id", (req, res) => {
+  router.delete("/subscriptions/:id", (req, res) => {
     const prevLen = subscriptions.length;
     subscriptions = subscriptions.filter(s => s.id !== req.params.id);
     if (subscriptions.length === prevLen) {
@@ -92,51 +93,66 @@ export function createApiApp() {
   });
 
   // Insights API
-  app.get("/api/insights", (req, res) => {
+  router.get("/insights", (req, res) => {
     const period = (req.query.period as string) || "thismonth";
     const data = INSIGHTS_PERIOD_DATA[period] || INSIGHTS_PERIOD_DATA.thismonth;
     res.json(data);
   });
 
-  // AI Optimizer API powered by OpenAI
-  app.post("/api/optimizer", async (req, res) => {
-    const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
-    const forceRefresh = Boolean(req.body.forceRefresh);
-    const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, forceRefresh);
-    res.json(result);
+  // AI Optimizer API powered by Gemini / OpenAI / Resilient Engine
+  router.post("/optimizer", async (req, res) => {
+    try {
+      const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
+      const forceRefresh = Boolean(req.body.forceRefresh);
+      const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, forceRefresh);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Optimizer Error:", err);
+      res.status(500).json({ error: err.message || "Failed to run optimizer" });
+    }
   });
 
-  app.get("/api/optimizer", async (req, res) => {
-    const budget = userProfile.monthlyBudget || 1000;
-    const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, false);
-    res.json(result);
+  router.get("/optimizer", async (req, res) => {
+    try {
+      const budget = userProfile.monthlyBudget || 1000;
+      const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, false);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Optimizer GET Error:", err);
+      res.status(500).json({ error: err.message || "Failed to get optimizer plan" });
+    }
   });
 
-  app.post("/api/optimizer/refresh", async (req, res) => {
-    const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
-    const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, true);
-    res.json(result);
+  router.post("/optimizer/refresh", async (req, res) => {
+    try {
+      const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
+      const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, true);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Optimizer Refresh Error:", err);
+      res.status(500).json({ error: err.message || "Failed to refresh optimizer" });
+    }
   });
 
   // Recommendations & Movies API
-  app.get("/api/recommendations", (req, res) => {
+  router.get("/recommendations", (req, res) => {
     const wishlistIds = wishlist.map(w => w.content_id || w.id);
     const result = getFutureRecommendations(userProfile.movieInterests || ["Superhero", "Action", "Sci-Fi"], subscriptions, wishlistIds);
     res.json(result);
   });
 
-  app.get("/api/movies/upcoming", (req, res) => {
+  router.get("/movies/upcoming", (req, res) => {
     const wishlistIds = wishlist.map(w => w.content_id || w.id);
     const result = getUpcomingMovies(userProfile.movieInterests || ["Superhero", "Action", "Sci-Fi"], wishlistIds);
     res.json(result);
   });
 
   // Wishlist API
-  app.get("/api/wishlist", (req, res) => {
+  router.get("/wishlist", (req, res) => {
     res.json(wishlist);
   });
 
-  app.post("/api/wishlist", (req, res) => {
+  router.post("/wishlist", (req, res) => {
     const item: WishlistItem = {
       id: req.body.id || req.body.content_id || `w_${Date.now()}`,
       content_id: req.body.content_id || req.body.id || `w_${Date.now()}`,
@@ -149,27 +165,27 @@ export function createApiApp() {
     res.json(item);
   });
 
-  app.delete("/api/wishlist/:id", (req, res) => {
+  router.delete("/wishlist/:id", (req, res) => {
     wishlist = wishlist.filter(w => w.id !== req.params.id && w.content_id !== req.params.id);
     res.json({ success: true });
   });
 
   // Comparisons API
-  app.post("/api/comparison/ott", (req, res) => {
+  router.post("/comparison/ott", (req, res) => {
     const platforms = req.body.platforms as string[] | undefined;
     const result = compareOttServices(platforms, subscriptions, userProfile);
     res.json(result);
   });
 
-  app.post("/api/comparison/services", (req, res) => {
+  router.post("/comparison/services", (req, res) => {
     const serviceA = req.body.serviceA || "spotify";
     const serviceB = req.body.serviceB || "applemusic";
     const result = compareUniversalServices(serviceA, serviceB, userProfile, subscriptions);
     res.json(result);
   });
 
-  // Natural Language Assistant Chat API (OpenAI Tool Calling Powered)
-  app.post("/api/assistant/chat", async (req, res) => {
+  // Natural Language Assistant Chat API (AI Advisor Powered)
+  router.post("/assistant/chat", async (req, res) => {
     try {
       const message = req.body.message || req.body.query || "";
       const answer = await runOpenAiAdvisorChat(message, subscriptions, userProfile, wishlist);
@@ -181,9 +197,18 @@ export function createApiApp() {
   });
 
   // Health API
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", app: "Trackey Node/TypeScript Engine", ai: "OpenAI Responses Engine" });
+  router.get("/health", (req, res) => {
+    res.json({
+      status: "ok",
+      app: "Trackey Node/TypeScript Engine",
+      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY)
+    });
   });
+
+  // Mount router under BOTH /api and root / to support direct routing and Vercel serverless rewrites seamlessly
+  app.use("/api", router);
+  app.use("/", router);
 
   return app;
 }

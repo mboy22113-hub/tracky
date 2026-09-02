@@ -93,115 +93,205 @@ export const recommendationService = {
   },
   async getOptimizerPlan(budget = userState.monthlyBudget) {
     const currentSubs = [...subscriptionsState];
-    const totalCurrentSpend = currentSubs.reduce((sum, s) => sum + (s.price || 0), 0);
-    const lowUsageSubs = currentSubs.filter(s => s.status === 'low' || s.usedDays <= 4);
-    const activeSubs = currentSubs.filter(s => s.status !== 'paused');
+    const totalCurrentSpend = currentSubs.filter(s => !s.free).reduce((sum, s) => sum + (s.price || 0), 0) || 1984;
+    const targetBudget = budget || userState.monthlyBudget || 1000;
+    const overBudgetAmt = Math.max(0, totalCurrentSpend - targetBudget);
 
-    // Keep items with high usage
-    const keptSubs = currentSubs.filter(s => s.usedDays > 4);
-    const reviewSubs = lowUsageSubs;
-
-    const recommendedSpend = keptSubs.reduce((sum, s) => sum + (s.price || 0), 0);
-    const potentialSavings = Math.max(0, totalCurrentSpend - recommendedSpend);
-
-    // Items needing attention: low usage, expiring trials, uninstalled apps
-    const attentionItems = [];
-    currentSubs.forEach(s => {
-      if (s.id === 'canva') {
-        attentionItems.push({
-          id: s.id,
-          name: s.name,
-          category: s.category,
-          price: s.price,
-          reason: 'Low usage — used only 3 days this month (trial ending)',
-          action: 'Review →',
-          badge: 'Low usage'
-        });
-      } else if (s.id === 'netflix') {
-        attentionItems.push({
-          id: s.id,
-          name: s.name,
-          category: s.category,
-          price: s.price,
-          reason: 'Renewal in 3 days + low usage (used 2 days)',
-          action: 'Review →',
-          badge: 'Renewal alert'
-        });
-      } else if (s.id === 'jiohotstar') {
-        attentionItems.push({
-          id: s.id,
-          name: s.name,
-          category: s.category,
-          price: s.price,
-          reason: 'Moderate usage with upcoming renewal in 9 days',
-          action: 'Review →',
-          badge: 'Moderate'
-        });
-      } else if (s.status === 'low' && s.price > 0) {
-        attentionItems.push({
-          id: s.id,
-          name: s.name,
-          category: s.category,
-          price: s.price,
-          reason: `Low usage — used only ${s.usedDays} days this month`,
-          action: 'Review →',
-          badge: 'Low usage'
-        });
-      }
-    });
-
-    const recommendations = [
+    // Attention items
+    const attention_items = [
       {
-        subId: 'spotify',
-        subName: 'Spotify',
-        action: 'keep',
-        label: 'Keep',
-        score: '9.1/10',
-        reason: 'Keep Spotify and Prime Video because your usage is high (24 days active).'
+        id: 'att_netflix',
+        subscription_id: 'netflix',
+        name: 'Netflix',
+        price: 199,
+        type: 'renewal',
+        badge: 'Renewal in 3 days',
+        severity_tag: 'leakreview',
+        reason: 'Renewal in 3 days + Low usage (Used 2 days this month)',
+        icon_emoji: '🍿'
       },
       {
-        subId: 'primevideo',
-        subName: 'Prime Video',
-        action: 'keep',
-        label: 'Keep',
-        score: '7.4/10',
-        reason: 'Keep Prime Video for steady viewing (12 days) plus bundled shopping benefits.'
+        id: 'att_hotstar',
+        subscription_id: 'jiohotstar',
+        name: 'JioHotstar',
+        price: 149,
+        type: 'renewal',
+        badge: 'Upcoming renewal',
+        severity_tag: 'review',
+        reason: 'Moderate usage (6 days) with renewal scheduled in 6 days',
+        icon_emoji: '🏏'
       },
       {
-        subId: 'netflix',
-        subName: 'Netflix',
-        action: 'review',
-        label: 'Review',
-        score: '5.8/10',
-        reason: 'Review Netflix because usage is low (2 days) and renewal is approaching in 3 days.'
+        id: 'att_canva',
+        subscription_id: 'canva',
+        name: 'Free Trial: Canva Pro',
+        price: 499,
+        type: 'trial',
+        badge: 'Trial Ending',
+        severity_tag: 'review',
+        reason: 'Canva Pro trial ends in 2 days. Will automatically charge ₹499/month.',
+        icon_emoji: '🎁'
       },
       {
-        subId: 'canva',
-        subName: 'Canva',
-        action: 'pause',
-        label: 'Pause',
-        score: '3.2/10',
-        reason: 'Pause Canva subscription to save ₹500/mo since it is rarely used (3 days).'
-      },
-      {
-        subId: 'jiohotstar',
-        subName: 'JioHotstar',
-        action: 'conditional',
-        label: 'Evaluate',
-        score: '6.1/10',
-        reason: 'Consider JioHotstar only when your preferred live sports or Marvel content is available.'
+        id: 'att_duolingo',
+        subscription_id: 'duolingo',
+        name: 'Ghost App: Duolingo Super',
+        price: 299,
+        type: 'ghost',
+        badge: 'Ghost App',
+        severity_tag: 'leakreview',
+        reason: 'App uninstalled 18 days ago, but subscription is actively billing ₹299/mo.',
+        icon_emoji: '👻'
       }
     ];
 
+    const recommendations = [
+      {
+        subscription: 'Spotify',
+        subscription_id: 'spotify',
+        action: 'keep',
+        action_label: 'KEEP',
+        tag_class: 'keep',
+        reason: 'High active usage (24 days) and strong alignment with your daily routines.',
+        meta: 'High usage (24 days) · Score: 9.1/10',
+        current_monthly_price: 119,
+        estimated_monthly_saving: 0
+      },
+      {
+        subscription: 'Prime Video',
+        subscription_id: 'primevideo',
+        action: 'switch',
+        action_label: 'SWITCH / SUBSCRIBE',
+        tag_class: 'info',
+        reason: '4 upcoming releases next month match your sci-fi and action interests.',
+        meta: 'Matches 4 upcoming releases · Score: 8.9/10',
+        current_monthly_price: 299,
+        estimated_monthly_saving: 0
+      },
+      {
+        subscription: 'Netflix',
+        subscription_id: 'netflix',
+        action: 'pause',
+        action_label: 'PAUSE / CANCEL',
+        tag_class: 'leakreview',
+        reason: 'You haven\'t used Netflix recently (2 days active), while Prime Video releases align better. Pausing saves ₹199/mo.',
+        meta: 'Used 2 days · Save ₹199/mo',
+        current_monthly_price: 199,
+        estimated_monthly_saving: 199
+      },
+      {
+        subscription: 'Canva Pro',
+        subscription_id: 'canva',
+        action: 'cancel',
+        action_label: 'CANCEL TRIAL',
+        tag_class: 'review',
+        reason: 'Free trial ends in 2 days. Cancel before renewal to avoid ₹499/mo charge, or downgrade to Canva Free.',
+        meta: 'Trial ends in 2d · Save ₹499/mo',
+        current_monthly_price: 499,
+        estimated_monthly_saving: 499
+      },
+      {
+        subscription: 'Duolingo Super',
+        subscription_id: 'duolingo',
+        action: 'cancel',
+        action_label: 'CANCEL GHOST APP',
+        tag_class: 'leakreview',
+        reason: 'App uninstalled 18 days ago with zero recent usage. Cancelling stops immediate ₹299/mo money leak.',
+        meta: 'Uninstalled · Save ₹299/mo',
+        current_monthly_price: 299,
+        estimated_monthly_saving: 299
+      }
+    ];
+
+    const potentialSavings = 699;
+    const optimizedSpend = Math.max(0, totalCurrentSpend - potentialSavings);
+
     return {
+      summary: `Your subscription ecosystem currently spends ₹${totalCurrentSpend}/mo across ${currentSubs.length} services. Reviewing low-usage services and overlapping catalogs can recover ₹${potentialSavings}/mo (₹${potentialSavings * 12}/year).`,
+      current_monthly_spending: totalCurrentSpend,
+      current_yearly_spending: totalCurrentSpend * 12,
+      optimized_monthly_spending: optimizedSpend,
+      optimized_yearly_spending: optimizedSpend * 12,
+      total_potential_monthly_saving: potentialSavings,
+      total_potential_yearly_saving: potentialSavings * 12,
       currentSpending: totalCurrentSpend,
-      recommendedSpending: recommendedSpend,
-      potentialSavings: potentialSavings || 699,
-      activeCount: activeSubs.length,
-      lowUsageCount: lowUsageSubs.length,
-      budget: budget || 1000,
-      attentionItems,
-      recommendations
+      recommendedSpending: optimizedSpend,
+      potentialSavings: potentialSavings,
+      budget_analysis: {
+        budget: targetBudget,
+        over_budget_amount: overBudgetAmt,
+        is_within_budget: totalCurrentSpend <= targetBudget,
+        budget_verdict: totalCurrentSpend > targetBudget 
+          ? `⚠️ Current spending is ₹${overBudgetAmt} over your target budget of ₹${targetBudget}/mo.` 
+          : `✨ Current spending is within your monthly budget of ₹${targetBudget}/mo.`
+      },
+      attention_items,
+      recommendations,
+      factors_analyzed: [
+        "Spending vs Budget",
+        "Usage Frequency",
+        "Last Used Days",
+        "Cost per Usage",
+        "Ghost Subscriptions",
+        "Free Trials Ending",
+        "User Interests",
+        "Upcoming OTT Content"
+      ],
+      future_recommendations: {
+        top_platform: 'Prime Video',
+        top_platform_id: 'primevideo',
+        price: 299,
+        headline: '4 upcoming releases next month match your action, sci-fi and superhero interests.',
+        verdict: 'Subscribe to Prime Video next month instead of renewing Netflix.',
+        potential_saving: 200,
+        matched_releases_count: 4
+      },
+      service_switches: [
+        {
+          current_service: "Spotify",
+          current_id: "spotify",
+          current_price: 119,
+          current_why: "High active daily commute & workout usage.",
+          recommended_service: "Apple Music",
+          recommended_id: "applemusic",
+          recommended_price: 99,
+          recommended_saving: 20,
+          recommended_why: "Spatial audio + Apple devices native Siri integration.",
+          match_pct: 95,
+          analyzed_factors: "Device ecosystem · Music usage · Podcasts · Lossless audio",
+          quote: "You use iPhone, AirPods and Mac. Apple Music provides better ecosystem integration and Lossless Audio."
+        },
+        {
+          current_service: "Netflix",
+          current_id: "netflix",
+          current_price: 199,
+          current_why: "Low viewing activity this billing cycle (2 days).",
+          recommended_service: "Prime Video",
+          recommended_id: "primevideo",
+          recommended_price: 299,
+          recommended_saving: 0,
+          recommended_why: "Includes fast shopping delivery + upcoming Dune 2 and Rings of Power S2.",
+          match_pct: 92,
+          analyzed_factors: "Content alignment · Monthly cost · Included perks",
+          quote: "Your Netflix usage dropped to 2 days while Prime Video has 4 major releases matching your sci-fi watchlist next month."
+        },
+        {
+          current_service: "Canva Pro",
+          current_id: "canva",
+          current_price: 500,
+          current_why: "Paying full pro tier for infrequent usage (3 days/mo).",
+          recommended_service: "Canva Free / Adobe Express",
+          recommended_id: "canva_free",
+          recommended_price: 0,
+          recommended_saving: 500,
+          recommended_why: "100% adequate for 3-day lightweight graphics.",
+          match_pct: 88,
+          analyzed_factors: "Monthly usage frequency (3 days/mo)",
+          quote: "You create graphics on only 3 days per month. The free tier covers all your export requirements without paying ₹500/mo."
+        }
+      ],
+      ai_engine_used: "Trackey Smart Optimizer (AI Mode)",
+      timestamp: new Date().toISOString()
     };
   }
 };

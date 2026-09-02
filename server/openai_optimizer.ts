@@ -1,9 +1,70 @@
 import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
 import { Subscription, UserProfile, WishlistItem } from "./types.js";
 import { DEFAULT_UPCOMING_CONTENT } from "./data.js";
 import { OPENAI_TOOLS_DEFINITIONS, executeOpenAiTool } from "./openai_tools.js";
 
 let openaiClient: OpenAI | null = null;
+let geminiClient: GoogleGenAI | null = null;
+
+function getGeminiClient(): GoogleGenAI | null {
+  if (!geminiClient && process.env.GEMINI_API_KEY) {
+    try {
+      geminiClient = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("Could not initialize Gemini client:", err);
+    }
+  }
+  return geminiClient;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))
+  ]);
+}
+
+// Gemini generation helper with model fallback for high-demand resilience
+async function generateGeminiJson(gemini: GoogleGenAI, contents: string, systemInstruction: string): Promise<any | null> {
+  const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+  for (const model of modelsToTry) {
+    try {
+      const generatePromise = gemini.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json"
+        }
+      });
+      const response = await withTimeout(generatePromise, 7000);
+      if (!response) {
+        continue;
+      }
+      const text = response.text?.trim();
+      if (text) {
+        return JSON.parse(text);
+      }
+    } catch (err: any) {
+      const isTemporary = err?.status === 503 || err?.code === 503 || err?.message?.includes("503") || err?.message?.includes("high demand") || err?.status === 429;
+      if (isTemporary && model !== modelsToTry[modelsToTry.length - 1]) {
+        // Try lighter model
+        continue;
+      }
+      // If last model or other error, break out
+      break;
+    }
+  }
+  return null;
+}
 
 function getOpenAiClient(): OpenAI | null {
   if (!openaiClient && process.env.OPENAI_API_KEY) {
@@ -366,7 +427,11 @@ export function generateAlgorithmicOptimizerFallback(
       "User Interests",
       "Upcoming OTT Content"
     ],
-    ai_engine_used: process.env.OPENAI_API_KEY ? "OpenAI Intelligence (Initialized)" : "Rule-Based Optimizer (Configure OPENAI_API_KEY in Settings)",
+    ai_engine_used: process.env.GEMINI_API_KEY
+      ? "Gemini Intelligence Engine"
+      : process.env.OPENAI_API_KEY
+      ? "OpenAI Intelligence"
+      : "Trackey Smart Optimizer (Algorithmic & Rules)",
     timestamp: new Date().toISOString()
   };
 }
@@ -385,17 +450,10 @@ export async function runOpenAiOptimizer(
     return cachedOptimizerResult.data;
   }
 
+  const gemini = getGeminiClient();
   const openai = getOpenAiClient();
-  if (!openai) {
-    const fallback = generateAlgorithmicOptimizerFallback(subscriptions, userProfile, budget);
-    cachedOptimizerResult = { data: fallback, hash: stateHash, expiresAt: Date.now() + 60000 };
-    return fallback;
-  }
 
-  const toolCtx = { subscriptions, userProfile, wishlist };
-
-  try {
-    const systemPrompt = `You are the Trackey Core AI Optimizer engine.
+  const systemPrompt = `You are the Trackey Core AI Optimizer engine.
 Your mission is to perform deep financial and usage reasoning across the user's active subscription ecosystem, prices, billing cycles, monthly/yearly spending, categories, usage frequency, user preferences, watch history, wishlist items, upcoming releases, renewal dates, and ghost apps.
 
 You MUST calculate and return an actionable structured JSON optimization response.
@@ -405,9 +463,10 @@ Rules:
 3. Compute precise monthly and yearly savings.
 4. Calculate upcoming release matches comparing user movie interests (${(userProfile.movieInterests || []).join(', ')}) with upcoming releases.
 5. Provide actionable service switches comparing current services with better alternatives based on devices (${(userProfile.connectedDevices || []).join(', ')}) and usage patterns.
-6. Provide specific attention items (renewals in <=3 days, trials ending, ghost apps uninstalled, low usage).`;
+6. Provide specific attention items (renewals in <=3 days, trials ending, ghost apps uninstalled, low usage).
+Return JSON object matching OptimizerResponseData schema with summary, current_monthly_spending, current_yearly_spending, optimized_monthly_spending, optimized_yearly_spending, total_potential_monthly_saving, total_potential_yearly_saving, budget_analysis, attention_items, recommendations, insights, future_recommendations, service_switches, factors_analyzed.`;
 
-    const userPrompt = `Analyze user subscription portfolio:
+  const userPrompt = `Analyze user subscription portfolio:
 - User: ${userProfile.name}, Budget: ₹${budget}/month
 - Devices: ${(userProfile.connectedDevices || []).join(', ')}
 - Movie Interests: ${(userProfile.movieInterests || []).join(', ')}
@@ -419,55 +478,11 @@ ${DEFAULT_UPCOMING_CONTENT.map(m => `• ${m.title} on ${m.platform_name} (${m.g
 
 Generate the complete structured JSON response matching the required schema.`;
 
-    // OpenAI Chat Completion with Tool Calling & Structured Output format
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt }
-    ];
-
-    // Tool calling round
-    let runnerResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      tools: OPENAI_TOOLS_DEFINITIONS,
-      tool_choice: "auto",
-      response_format: { type: "json_object" }
-    });
-
-    let choice = runnerResponse.choices[0];
-    let iterations = 0;
-
-    while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
-      iterations++;
-      messages.push(choice.message);
-
-      for (const toolCall of choice.message.tool_calls) {
-        if (toolCall.type === "function") {
-          let args = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments || "{}");
-          } catch {}
-          const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result)
-          });
-        }
-      }
-
-      runnerResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        response_format: { type: "json_object" }
-      });
-      choice = runnerResponse.choices[0];
-    }
-
-    const contentStr = choice?.message?.content;
-    if (contentStr) {
-      const parsed = JSON.parse(contentStr);
-      if (parsed.recommendations && parsed.current_monthly_spending !== undefined) {
+  // 1. Try Gemini API first if configured
+  if (gemini) {
+    try {
+      const parsed = await generateGeminiJson(gemini, userPrompt, systemPrompt);
+      if (parsed && parsed.recommendations && parsed.current_monthly_spending !== undefined) {
         const fullResult: OptimizerResponseData = {
           summary: parsed.summary || `AI optimized subscription portfolio saving ₹${parsed.total_potential_monthly_saving || 699}/month.`,
           current_monthly_spending: parsed.current_monthly_spending || subscriptions.filter(s => !s.free).reduce((a, b) => a + b.price, 0),
@@ -505,18 +520,120 @@ Generate the complete structured JSON response matching the required schema.`;
             "User Interests",
             "Upcoming OTT Content"
           ],
-          ai_engine_used: "OpenAI (GPT-4o)",
+          ai_engine_used: "Gemini Intelligence Engine",
           timestamp: new Date().toISOString()
         };
 
         cachedOptimizerResult = { data: fullResult, hash: stateHash, expiresAt: Date.now() + 120000 };
         return fullResult;
       }
+    } catch (err) {
+      console.warn("Gemini Optimizer execution warning, trying next engine:", err);
     }
-  } catch (err) {
-    console.warn("OpenAI Optimizer execution warning, falling back to algorithmic reasoning:", err);
   }
 
+  // 2. Try OpenAI API if configured
+  if (openai) {
+    const toolCtx = { subscriptions, userProfile, wishlist };
+    try {
+      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ];
+
+      let runnerResponse = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        tools: OPENAI_TOOLS_DEFINITIONS,
+        tool_choice: "auto",
+        response_format: { type: "json_object" }
+      });
+
+      let choice = runnerResponse.choices[0];
+      let iterations = 0;
+
+      while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
+        iterations++;
+        messages.push(choice.message);
+
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === "function") {
+            let args = {};
+            try {
+              args = JSON.parse(toolCall.function.arguments || "{}");
+            } catch {}
+            const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result)
+            });
+          }
+        }
+
+        runnerResponse = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages,
+          response_format: { type: "json_object" }
+        });
+        choice = runnerResponse.choices[0];
+      }
+
+      const contentStr = choice?.message?.content;
+      if (contentStr) {
+        const parsed = JSON.parse(contentStr);
+        if (parsed.recommendations && parsed.current_monthly_spending !== undefined) {
+          const fullResult: OptimizerResponseData = {
+            summary: parsed.summary || `AI optimized subscription portfolio saving ₹${parsed.total_potential_monthly_saving || 699}/month.`,
+            current_monthly_spending: parsed.current_monthly_spending || subscriptions.filter(s => !s.free).reduce((a, b) => a + b.price, 0),
+            current_yearly_spending: parsed.current_yearly_spending || (parsed.current_monthly_spending * 12),
+            optimized_monthly_spending: parsed.optimized_monthly_spending || 1285,
+            optimized_yearly_spending: parsed.optimized_yearly_spending || (parsed.optimized_monthly_spending * 12),
+            total_potential_monthly_saving: parsed.total_potential_monthly_saving || 699,
+            total_potential_yearly_saving: parsed.total_potential_yearly_saving || 8388,
+            budget_analysis: parsed.budget_analysis || {
+              budget,
+              over_budget_amount: Math.max(0, parsed.current_monthly_spending - budget),
+              is_within_budget: parsed.current_monthly_spending <= budget,
+              budget_verdict: parsed.current_monthly_spending > budget ? `⚠️ Spending is over target monthly budget.` : `✨ Spending is within monthly budget.`
+            },
+            attention_items: parsed.attention_items || [],
+            recommendations: parsed.recommendations || [],
+            insights: parsed.insights || [],
+            future_recommendations: parsed.future_recommendations || {
+              top_platform: "Prime Video",
+              top_platform_id: "primevideo",
+              price: 299,
+              headline: "4 upcoming releases next month match your interests.",
+              verdict: "Subscribe to Prime Video next month instead of renewing Netflix.",
+              potential_saving: 200,
+              matched_releases_count: 4
+            },
+            service_switches: parsed.service_switches || [],
+            factors_analyzed: parsed.factors_analyzed || [
+              "Spending vs Budget",
+              "Usage Frequency",
+              "Last Used Days",
+              "Cost per Usage",
+              "Ghost Subscriptions",
+              "Free Trials Ending",
+              "User Interests",
+              "Upcoming OTT Content"
+            ],
+            ai_engine_used: "OpenAI (GPT-4o)",
+            timestamp: new Date().toISOString()
+          };
+
+          cachedOptimizerResult = { data: fullResult, hash: stateHash, expiresAt: Date.now() + 120000 };
+          return fullResult;
+        }
+      }
+    } catch (err) {
+      console.warn("OpenAI Optimizer execution warning, falling back to algorithmic reasoning:", err);
+    }
+  }
+
+  // 3. Fallback to algorithmic rule-based optimization
   const fallback = generateAlgorithmicOptimizerFallback(subscriptions, userProfile, budget);
   cachedOptimizerResult = { data: fallback, hash: stateHash, expiresAt: Date.now() + 60000 };
   return fallback;
@@ -528,10 +645,38 @@ export async function runOpenAiAdvisorChat(
   userProfile: UserProfile,
   wishlist: WishlistItem[] = []
 ): Promise<{ answer: string; reason: string; action: { label: string; type: string; payload: any } | null }> {
+  const gemini = getGeminiClient();
   const openai = getOpenAiClient();
-  const toolCtx = { subscriptions, userProfile, wishlist };
 
+  // 1. Try Gemini
+  if (gemini) {
+    try {
+      const contents = `User Query: "${query}"\nUser: ${userProfile.name}, Budget: ₹${userProfile.monthlyBudget || 1000}/mo\nSubscriptions: ${JSON.stringify(subscriptions.map(s => ({ name: s.name, price: s.price, usedDays: s.usedDays, status: s.status, renewsIn: s.renewsIn })))}\nWishlist: ${JSON.stringify(wishlist)}`;
+      const systemInstruction = `You are Trackey AI, an expert personal subscription intelligence advisor.
+Answer the user's question directly and concisely (1-2 sentences) using the real application data.
+Explain the reason in 1 sentence.
+Return a structured JSON output with:
+{
+  "answer": "string",
+  "reason": "string",
+  "action": {
+    "label": "string",
+    "type": "navigate_insights | navigate_optimize | open_detail | open_comparison | open_ott_comparison",
+    "payload": {}
+  } | null
+}`;
+      const parsed = await generateGeminiJson(gemini, contents, systemInstruction);
+      if (parsed && parsed.answer) {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn("Gemini Chat Advisor execution warning:", err);
+    }
+  }
+
+  // 2. Try OpenAI
   if (openai) {
+    const toolCtx = { subscriptions, userProfile, wishlist };
     try {
       const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         {
@@ -601,7 +746,7 @@ Return a structured JSON output with:
     }
   }
 
-  // Fallback to internal algorithmic rule-based advisor
+  // 3. Fallback to internal algorithmic rule-based advisor
   return generateRuleBasedAdvisorResponse(query, subscriptions, userProfile, wishlist);
 }
 
