@@ -82,3 +82,18 @@ trackey/
 - `POST /api/comparison/ott` — Compare top OTT streaming platforms side-by-side
 - `POST /api/comparison/services` — Universal comparison between two services
 - `POST /api/assistant/chat` — Personal Subscription AI Advisor (Answer + Reason + Action)
+
+## Deploying to Vercel
+
+Trackey is pre-configured for 1-click zero-config deployment on Vercel:
+
+1. **Push or Export to GitHub**:
+   - Push this repository to your GitHub account (or use the export button in AI Studio).
+2. **Import into Vercel**:
+   - Go to [vercel.com](https://vercel.com) and click **"Add New Project"** → **"Import Git Repository"**.
+   - Vercel will automatically detect `vercel.json`, build the frontend with `vite build` into `dist`, and route all `/api/*` endpoints to the serverless function in `api/index.ts`.
+3. **Set Environment Variables (Optional)**:
+   - In your Vercel project settings, under **Environment Variables**, add:
+     - `OPENAI_API_KEY` (if you want live OpenAI completions for the Assistant & Optimizer; fallback heuristic responses are already bundled).
+4. **Deploy**:
+   - Click **Deploy**!

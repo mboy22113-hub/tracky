@@ -6,16 +6,28 @@ export function renderSubscriptionsScreen(state) {
   const paidSubs = subscriptions.filter(s => !s.free);
   const totalMonthly = paidSubs.reduce((acc, s) => acc + (s.price || 0), 0);
 
-  const filteredSubs = selectedCategory === 'all'
-    ? subscriptions
-    : subscriptions.filter(s => (s.category || '').toLowerCase() === selectedCategory.toLowerCase());
+  const ghostSubs = subscriptions.filter(s => s.appInstalled === false);
+  const trialSubs = subscriptions.filter(s => s.trialDaysLeft !== undefined && s.trialDaysLeft !== null);
+
+  let filteredSubs = subscriptions;
+  if (selectedCategory === 'all') {
+    filteredSubs = subscriptions;
+  } else if (selectedCategory === 'ghost') {
+    filteredSubs = ghostSubs;
+  } else if (selectedCategory === 'trials') {
+    filteredSubs = trialSubs;
+  } else {
+    filteredSubs = subscriptions.filter(s => (s.category || '').toLowerCase() === selectedCategory.toLowerCase());
+  }
 
   const categories = [
     { id: 'all', label: 'All', count: subscriptions.length },
     { id: 'movies', label: 'Movies', count: subscriptions.filter(s => s.category === 'movies').length },
     { id: 'music', label: 'Music', count: subscriptions.filter(s => s.category === 'music').length },
     { id: 'games', label: 'Games', count: subscriptions.filter(s => s.category === 'games').length },
-    { id: 'others', label: 'Others', count: subscriptions.filter(s => s.category === 'others').length }
+    { id: 'others', label: 'Others', count: subscriptions.filter(s => s.category === 'others').length },
+    { id: 'trials', label: '🎁 Trials', count: trialSubs.length },
+    { id: 'ghost', label: '👻 Ghost Apps', count: ghostSubs.length }
   ];
 
   return `
@@ -31,11 +43,11 @@ export function renderSubscriptionsScreen(state) {
         </button>
       </div>
 
-      <!-- 2. Search & Category Filters Bar -->
-      <div class="pills" id="subs-category-pills" style="margin-top:14px;">
+      <!-- 2. Search & Category Filters Bar with Ghost Apps & Free Trials Tabs -->
+      <div class="pills" id="subs-category-pills" style="margin-top:14px; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px;">
         ${categories.map(cat => `
-          <div class="pill ${selectedCategory === cat.id ? 'active' : ''}" data-cat="${cat.id}">
-            ${cat.label} ${cat.count ? `<span style="font-size:10px; opacity:0.8; margin-left:2px;">(${cat.count})</span>` : ''}
+          <div class="pill ${selectedCategory === cat.id ? 'active' : ''}" data-cat="${cat.id}" style="white-space:nowrap; flex-shrink:0;">
+            ${cat.label} ${cat.count !== undefined ? `<span style="font-size:10px; opacity:0.85; margin-left:3px; font-weight:700;">(${cat.count})</span>` : ''}
           </div>
         `).join('')}
       </div>

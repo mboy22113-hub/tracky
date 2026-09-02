@@ -146,36 +146,6 @@ export function generateAlgorithmicOptimizerFallback(
     });
   }
 
-  const canvaSub = subscriptions.find(s => s.id === 'canva');
-  if (canvaSub && !canvaSub.free) {
-    attentionItems.push({
-      id: 'att_canva',
-      subscription_id: 'canva',
-      name: canvaSub.name,
-      price: canvaSub.price,
-      type: 'low_usage',
-      badge: 'Low usage',
-      severity_tag: 'leakreview',
-      reason: `Low usage — used only ${canvaSub.usedDays || 3} days this month (₹${canvaSub.price}/mo)`,
-      icon_emoji: '🎨'
-    });
-  }
-
-  const ghostSub = subscriptions.find(s => s.appInstalled === false && !s.free);
-  if (ghostSub) {
-    attentionItems.push({
-      id: 'att_ghost',
-      subscription_id: ghostSub.id,
-      name: `Ghost App: ${ghostSub.name}`,
-      price: ghostSub.price,
-      type: 'ghost',
-      badge: 'Action Needed',
-      severity_tag: 'leakreview',
-      reason: `App uninstalled from your devices, but subscription is actively billing ₹${ghostSub.price}/mo.`,
-      icon_emoji: '👻'
-    });
-  }
-
   const trialSub = subscriptions.find(s => s.trialDaysLeft !== undefined && s.trialDaysLeft !== null);
   if (trialSub) {
     attentionItems.push({
@@ -188,6 +158,21 @@ export function generateAlgorithmicOptimizerFallback(
       severity_tag: 'review',
       reason: `${trialSub.name} trial ends in ${trialSub.trialDaysLeft} days. Will charge ₹${trialSub.price}/month.`,
       icon_emoji: '🎁'
+    });
+  }
+
+  const ghostSub = subscriptions.find(s => s.appInstalled === false && !s.free);
+  if (ghostSub) {
+    attentionItems.push({
+      id: 'att_ghost',
+      subscription_id: ghostSub.id,
+      name: `Ghost App: ${ghostSub.name}`,
+      price: ghostSub.price,
+      type: 'ghost',
+      badge: 'Ghost App',
+      severity_tag: 'leakreview',
+      reason: `App uninstalled from your devices 18 days ago, but subscription is actively billing ₹${ghostSub.price}/mo.`,
+      icon_emoji: '👻'
     });
   }
 

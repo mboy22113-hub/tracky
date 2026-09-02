@@ -44,6 +44,32 @@ export function renderSubscriptionDetailScreen(sub) {
         <div class="detail-pill">${sub.redundancy || 'Low overlap'}</div>
       </div>
 
+      ${sub.appInstalled === false ? `
+        <!-- Ghost App Warning Banner -->
+        <div style="margin-top:14px; padding:14px 16px; background:rgba(239, 68, 68, 0.08); border:1px solid rgba(239, 68, 68, 0.25); border-radius:14px; display:flex; align-items:flex-start; gap:12px;">
+          <div style="font-size:22px; line-height:1; flex-shrink:0;">👻</div>
+          <div>
+            <strong style="color:var(--danger, #EF4444); font-size:13.5px; display:block; margin-bottom:3px;">Ghost App Alert Detected</strong>
+            <p style="font-size:12px; color:var(--text); margin:0; line-height:1.45;">
+              This app is <strong>not installed</strong> on any of your devices, but AutoPay is still charging <strong>${priceDisplay}/mo</strong>. We recommend cancelling this subscription to stop money leakage.
+            </p>
+          </div>
+        </div>
+      ` : ''}
+
+      ${sub.trialDaysLeft ? `
+        <!-- Free Trial Expiry Banner -->
+        <div style="margin-top:14px; padding:14px 16px; background:rgba(217, 119, 6, 0.08); border:1px solid rgba(217, 119, 6, 0.25); border-radius:14px; display:flex; align-items:flex-start; gap:12px;">
+          <div style="font-size:22px; line-height:1; flex-shrink:0;">🎁</div>
+          <div>
+            <strong style="color:var(--amber, #D97706); font-size:13.5px; display:block; margin-bottom:3px;">Free Trial Ending Soon (${sub.trialDaysLeft} days remaining)</strong>
+            <p style="font-size:12px; color:var(--text); margin:0; line-height:1.45;">
+              Your free trial will expire in <strong>${sub.trialDaysLeft} days</strong> and automatically convert to a recurring charge of <strong>${priceDisplay}/mo</strong>. Cancel before ${sub.nextRenewal || 'renewal'} to avoid being charged.
+            </p>
+          </div>
+        </div>
+      ` : ''}
+
       <!-- Detail Grid -->
       <div class="detail-grid glass">
         <div>

@@ -110,6 +110,23 @@ export function getServiceLogo(nameOrId = '', fallbackColor = '#2F6FED') {
     `;
   }
 
+  // Duolingo
+  if (key.includes('duolingo') || key.includes('duo')) {
+    return `
+      <svg viewBox="0 0 32 32" width="100%" height="100%" fill="none">
+        <rect width="32" height="32" rx="8" fill="#58CC02"/>
+        <circle cx="12" cy="14" r="4.5" fill="#FFFFFF"/>
+        <circle cx="20" cy="14" r="4.5" fill="#FFFFFF"/>
+        <circle cx="12.5" cy="14" r="2.2" fill="#4B4B4B"/>
+        <circle cx="19.5" cy="14" r="2.2" fill="#4B4B4B"/>
+        <circle cx="13.2" cy="13.2" r="0.8" fill="#FFFFFF"/>
+        <circle cx="20.2" cy="13.2" r="0.8" fill="#FFFFFF"/>
+        <path d="M14 17.5c0 1.2 1 2 2 2s2-.8 2-2h-4z" fill="#FF9600"/>
+        <path d="M16 8c-4.5 0-8 3.5-8 8v3c0 1.5 1.5 2.5 3 2.5h10c1.5 0 3-1 3-2.5v-3c0-4.5-3.5-8-8-8z" stroke="#58CC02" stroke-width="1.5" fill="none"/>
+      </svg>
+    `;
+  }
+
   // YouTube / YouTube Premium
   if (key.includes('youtube')) {
     return `

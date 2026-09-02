@@ -38,8 +38,19 @@ export function renderProfileScreen(state) {
         <p>Customize your taste profile, connected devices & optimization goals</p>
       </div>
 
-      <!-- 1️⃣ Profile Information -->
+      <!-- 1️⃣ Profile Information & Account Status Badge -->
       <div class="pcard glass" style="margin-top:14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+          <div class="account-status-badge">
+            <span class="status-indicator-dot"></span>
+            <span>Active Session • Pro Tier</span>
+          </div>
+          <button class="profile-switch-acc-btn" id="profile-open-login-btn" title="Switch or Manage Account">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/><polyline points="19 8 22 11 19 14"/></svg>
+            <span>Switch / Login</span>
+          </button>
+        </div>
+
         <div style="display:flex; align-items:center; gap:12px;">
           <div class="profile-avatar">${user.name ? user.name[0].toUpperCase() : 'A'}</div>
           <div class="profile-id">
@@ -170,6 +181,33 @@ export function renderProfileScreen(state) {
             <input type="checkbox" id="toggle-ghosts" ${notifications.ghostSubscriptions ? 'checked' : ''}>
             <span class="toggle-slider"></span>
           </label>
+        </div>
+      </div>
+
+      <!-- 5️⃣ Account Security & Session Management -->
+      <div class="pcard glass" style="margin-top:14px;">
+        <h3>Account & Security</h3>
+        <div class="pcard-sub">Manage active session, connected credentials & switch profile</div>
+
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--bg-deep); border-radius:10px;">
+            <div>
+              <div style="font-size:12px; font-weight:700; color:var(--navy);">Logged in as <span style="color:var(--primary);">${user.name || 'Alex'}</span></div>
+              <div style="font-size:11px; color:var(--muted);">${user.email || 'alex@email.com'}</div>
+            </div>
+            <span class="auth-badge-pill">Verified</span>
+          </div>
+
+          <div style="display:flex; gap:8px;">
+            <button class="opt-nav-btn secondary" id="profile-switch-account-bottom-btn" style="flex:1; font-size:12px; padding:10px 14px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/><polyline points="19 8 22 11 19 14"/></svg>
+              <span>Login with another Account</span>
+            </button>
+            <button class="opt-nav-btn secondary" id="profile-sign-out-btn" style="flex:0 0 auto; min-width:85px; font-size:12px; padding:10px 14px; color:#EF4444; border-color:rgba(239,68,68,0.25);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span>Log Out</span>
+            </button>
+          </div>
         </div>
       </div>
 

@@ -62,6 +62,16 @@ export function renderHomeSubItem(sub = {}) {
   const { className: statusClass, label: statusLabel } = getStatusDetails(sub);
   const logoSvg = getServiceLogo(sub.name || sub.id, sub.color || '#2F6FED');
 
+  const specialBadge = sub.appInstalled === false ? `
+    <span class="status danger" style="font-size:9.5px;background:var(--danger-soft);color:var(--danger);font-weight:700;padding:2px 6px;border-radius:6px;">
+      👻 Ghost App
+    </span>
+  ` : sub.trialDaysLeft ? `
+    <span class="status amber" style="font-size:9.5px;background:var(--amber-soft);color:var(--amber);font-weight:700;padding:2px 6px;border-radius:6px;">
+      🎁 Trial (${sub.trialDaysLeft}d left)
+    </span>
+  ` : '';
+
   return `
     <div class="sub-card-enhanced" data-sub-id="${sub.id || ''}" id="sub-card-${sub.id || 'item'}">
       <div class="sub-card-header">
@@ -86,8 +96,11 @@ export function renderHomeSubItem(sub = {}) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
           <span>${renewalText}</span>
         </div>
-        <div class="status ${statusClass}">
-          <div class="dot"></div>${statusLabel}
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <div class="status ${statusClass}">
+            <div class="dot"></div>${statusLabel}
+          </div>
+          ${specialBadge}
         </div>
       </div>
     </div>
@@ -104,13 +117,13 @@ export function renderSubCard(sub = {}) {
   const { className: statusClass, label: statusLabel } = getStatusDetails(sub);
   const logoSvg = getServiceLogo(sub.name || sub.id, sub.color || '#2F6FED');
 
-  const extraBadge = sub.trialDaysLeft ? `
-    <span class="status moderate" style="font-size:9.5px;">
-      <div class="dot"></div>Trial (${sub.trialDaysLeft}d left)
+  const extraBadge = sub.appInstalled === false ? `
+    <span class="status danger" style="font-size:9.5px;background:var(--danger-soft);color:var(--danger);font-weight:700;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;">
+      <span>👻</span>Ghost App
     </span>
-  ` : sub.appInstalled === false ? `
-    <span class="status low" style="font-size:9.5px;">
-      <div class="dot"></div>App uninstalled
+  ` : sub.trialDaysLeft ? `
+    <span class="status amber" style="font-size:9.5px;background:var(--amber-soft);color:var(--amber);font-weight:700;padding:2px 7px;border-radius:6px;display:inline-flex;align-items:center;gap:3px;">
+      <span>🎁</span>Trial (${sub.trialDaysLeft}d left)
     </span>
   ` : '';
 

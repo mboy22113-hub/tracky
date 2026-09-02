@@ -12,6 +12,7 @@ import { renderCompareScreen } from './screens/compare.js';
 import { renderInsightsScreen } from './screens/insights.js';
 import { renderOptimizeScreen } from './screens/optimize.js';
 import { renderProfileScreen } from './screens/profile.js';
+import { renderLoginScreen } from './screens/login.js';
 
 // Application State (Single Source of Truth)
 const state = {
@@ -21,6 +22,7 @@ const state = {
   compareServiceA: 'spotify',
   compareServiceB: 'applemusic',
   optimizerStep: 1,
+  loginMode: 'signin',
   planApplied: false,
   insightsPeriod: 'thismonth',
   user: { ...INITIAL_USER },
@@ -67,17 +69,32 @@ function renderApp() {
     case 'profile':
       html = renderProfileScreen(state);
       break;
+    case 'login':
+      html = renderLoginScreen(state);
+      break;
     default:
       html = renderHomeScreen(state);
   }
 
   container.innerHTML = html;
 
-  // Render bottom nav (hide on detail screen or keep consistent)
+  // Update header avatar display
+  const headerAvatar = document.getElementById('header-avatar');
+  if (headerAvatar && state.user && state.user.name) {
+    headerAvatar.textContent = state.user.name.charAt(0).toUpperCase();
+  }
+
+  // Render bottom nav (hide on login screen or detail screen)
   if (bottomNavContainer) {
-    bottomNavContainer.innerHTML = renderBottomNav(
-      state.activeScreen === 'detail' ? 'subscriptions' : state.activeScreen
-    );
+    if (state.activeScreen === 'login') {
+      bottomNavContainer.innerHTML = '';
+      bottomNavContainer.style.display = 'none';
+    } else {
+      bottomNavContainer.style.display = 'block';
+      bottomNavContainer.innerHTML = renderBottomNav(
+        state.activeScreen === 'detail' ? 'subscriptions' : state.activeScreen
+      );
+    }
   }
 
   attachScreenListeners();
@@ -99,6 +116,13 @@ function navigateTo(screenId, subId = null) {
 // Initial Data Fetching from FastAPI REST backend
 async function initializeData() {
   try {
+    try {
+      const savedUser = localStorage.getItem('trackey_user_session');
+      if (savedUser) {
+        state.user = { ...state.user, ...JSON.parse(savedUser) };
+      }
+    } catch (e) {}
+
     const [userRes, subsRes, moviesRes, wishlistRes] = await Promise.allSettled([
       api.getProfile(),
       api.getSubscriptions(),
@@ -106,7 +130,7 @@ async function initializeData() {
       api.getWishlist()
     ]);
 
-    if (userRes.status === 'fulfilled') state.user = userRes.value;
+    if (userRes.status === 'fulfilled' && !localStorage.getItem('trackey_user_session')) state.user = userRes.value;
     if (subsRes.status === 'fulfilled' && subsRes.value.length > 0) state.subscriptions = subsRes.value;
     if (moviesRes.status === 'fulfilled') state.movies = moviesRes.value;
     if (wishlistRes.status === 'fulfilled') state.wishlist = wishlistRes.value;
@@ -1063,6 +1087,197 @@ function attachScreenListeners() {
         await api.updateProfile(state.user);
       };
     }
+  });
+
+  // Profile Account & Session Management Buttons
+  const profOpenLoginBtn = document.getElementById('profile-open-login-btn');
+  if (profOpenLoginBtn) {
+    profOpenLoginBtn.onclick = () => {
+      state.loginMode = 'signin';
+      navigateTo('login');
+    };
+  }
+
+  const profSwitchAccBottomBtn = document.getElementById('profile-switch-account-bottom-btn');
+  if (profSwitchAccBottomBtn) {
+    profSwitchAccBottomBtn.onclick = () => {
+      state.loginMode = 'signin';
+      navigateTo('login');
+    };
+  }
+
+  const profSignOutBtn = document.getElementById('profile-sign-out-btn');
+  if (profSignOutBtn) {
+    profSignOutBtn.onclick = () => {
+      state.user = {
+        id: 'u_guest',
+        name: 'Guest User',
+        email: 'guest@trackey.app',
+        monthlyBudget: 1000,
+        optimizationGoal: 'best_value',
+        movieInterests: ['Action'],
+        connectedDevices: ['mobile']
+      };
+      state.loginMode = 'signin';
+      try {
+        localStorage.removeItem('trackey_user_session');
+      } catch (e) {}
+      navigateTo('login');
+    };
+  }
+
+  // Login Screen Listeners
+  const loginBackBtn = document.getElementById('login-back-btn');
+  if (loginBackBtn) {
+    loginBackBtn.onclick = () => navigateTo('profile');
+  }
+
+  // Auth Mode Switcher (Sign In vs Create Account)
+  const authTabSignin = document.getElementById('auth-tab-signin');
+  if (authTabSignin) {
+    authTabSignin.onclick = () => {
+      state.loginMode = 'signin';
+      renderApp();
+    };
+  }
+
+  const authTabSignup = document.getElementById('auth-tab-signup');
+  if (authTabSignup) {
+    authTabSignup.onclick = () => {
+      state.loginMode = 'signup';
+      renderApp();
+    };
+  }
+
+  // Password Visibility Toggle
+  const pwdToggle = document.getElementById('auth-password-toggle');
+  if (pwdToggle) {
+    pwdToggle.onclick = () => {
+      const pwdInput = document.getElementById('auth-password-input');
+      if (pwdInput) {
+        const isPwd = pwdInput.type === 'password';
+        pwdInput.type = isPwd ? 'text' : 'password';
+        pwdToggle.innerHTML = isPwd
+          ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`
+          : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+      }
+    };
+  }
+
+  // Forgot Password Prompt
+  const authForgotBtn = document.getElementById('auth-forgot-btn');
+  if (authForgotBtn) {
+    authForgotBtn.onclick = () => {
+      if (modal) {
+        modal.open(
+          'Password Reset',
+          `
+            <div style="font-size:13px; color:var(--muted); line-height:1.5;">
+              <p>Enter your email to receive a secure login link or PIN:</p>
+              <input type="email" class="field-input" style="margin-top:10px;" value="${state.user?.email || 'alex@email.com'}" placeholder="your@email.com">
+              <button class="cta" style="margin-top:14px; width:100%;" onclick="document.getElementById('modal-close-btn').click(); alert('Password reset link sent to your email.');">Send Reset Link →</button>
+            </div>
+          `
+        );
+      }
+    };
+  }
+
+  // Auth Form Submission
+  const authForm = document.getElementById('auth-form');
+  if (authForm) {
+    authForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById('auth-submit-btn');
+      const btnLabel = document.getElementById('auth-btn-label');
+      const nameInput = document.getElementById('auth-name-input');
+      const emailInput = document.getElementById('auth-email-input');
+
+      const name = nameInput ? nameInput.value.trim() : (state.user?.name || 'Alex');
+      const email = emailInput ? emailInput.value.trim() : (state.user?.email || 'alex@email.com');
+
+      if (submitBtn) {
+        submitBtn.style.opacity = '0.75';
+        submitBtn.style.pointerEvents = 'none';
+      }
+      if (btnLabel) btnLabel.textContent = 'Authenticating...';
+
+      setTimeout(async () => {
+        state.user.name = name || 'Alex';
+        state.user.email = email || 'alex@email.com';
+
+        try {
+          localStorage.setItem('trackey_user_session', JSON.stringify(state.user));
+          await api.updateProfile(state.user);
+        } catch (err) {}
+
+        // Update header avatar immediately
+        const headerAvatar = document.getElementById('header-avatar');
+        if (headerAvatar) headerAvatar.textContent = state.user.name.charAt(0).toUpperCase();
+
+        navigateTo('home');
+      }, 450);
+    };
+  }
+
+  // Social & Passkey Buttons
+  const socialGoogleBtn = document.getElementById('social-google-btn');
+  if (socialGoogleBtn) {
+    socialGoogleBtn.onclick = () => {
+      socialGoogleBtn.style.opacity = '0.7';
+      setTimeout(async () => {
+        state.user.name = 'Alex Google';
+        state.user.email = 'alex.google@gmail.com';
+        try {
+          localStorage.setItem('trackey_user_session', JSON.stringify(state.user));
+          await api.updateProfile(state.user);
+        } catch (e) {}
+        navigateTo('home');
+      }, 350);
+    };
+  }
+
+  const socialPasskeyBtn = document.getElementById('social-passkey-btn');
+  if (socialPasskeyBtn) {
+    socialPasskeyBtn.onclick = () => {
+      socialPasskeyBtn.style.opacity = '0.7';
+      setTimeout(async () => {
+        state.user.name = 'Alex (Biometric)';
+        try {
+          localStorage.setItem('trackey_user_session', JSON.stringify(state.user));
+          await api.updateProfile(state.user);
+        } catch (e) {}
+        navigateTo('home');
+      }, 350);
+    };
+  }
+
+  // 1-Click Quick Demo Profiles Switcher
+  document.querySelectorAll('[data-demo-email]').forEach(item => {
+    item.onclick = async () => {
+      const email = item.getAttribute('data-demo-email');
+      const name = item.getAttribute('data-demo-name');
+      const budget = parseFloat(item.getAttribute('data-demo-budget')) || 1000;
+      const goal = item.getAttribute('data-demo-goal') || 'best_value';
+
+      item.classList.add('active');
+      state.user = {
+        ...state.user,
+        name,
+        email,
+        monthlyBudget: budget,
+        optimizationGoal: goal
+      };
+
+      try {
+        localStorage.setItem('trackey_user_session', JSON.stringify(state.user));
+        await api.updateProfile(state.user);
+      } catch (e) {}
+
+      setTimeout(() => {
+        navigateTo('home');
+      }, 200);
+    };
   });
 
   // Setup subtle scroll reveal for cards & sections

@@ -208,34 +208,24 @@ function renderSection2Attention({ subscriptions, optimizer }) {
           icon_emoji: '🏏'
         },
         {
-          id: 'canva',
-          subscription_id: 'canva',
-          name: 'Canva',
-          price: 500,
-          badge: 'Low usage',
-          severity_tag: 'leakreview',
-          reason: 'Low usage — used only 3 days this month (₹500/mo)',
-          icon_emoji: '🎨'
-        },
-        {
-          id: 'ghost',
-          subscription_id: 'primevideo',
-          name: 'Ghost App: Prime Video',
-          price: 299,
-          badge: 'Action Needed',
-          severity_tag: 'leakreview',
-          reason: 'App deleted from your devices, but subscription is still actively billing ₹299/mo.',
-          icon_emoji: '👻'
-        },
-        {
-          id: 'trial',
+          id: 'trial_canva',
           subscription_id: 'canva',
           name: 'Free Trial: Canva Pro',
-          price: 500,
+          price: 499,
           badge: 'Trial Ending',
           severity_tag: 'review',
-          reason: 'Canva Pro trial ends in 2 days. Will automatically charge ₹500/month.',
+          reason: 'Canva Pro trial ends in 2 days. Will automatically charge ₹499/month.',
           icon_emoji: '🎁'
+        },
+        {
+          id: 'ghost_duolingo',
+          subscription_id: 'duolingo',
+          name: 'Ghost App: Duolingo Super',
+          price: 299,
+          badge: 'Ghost App',
+          severity_tag: 'leakreview',
+          reason: 'App uninstalled 18 days ago, but subscription is actively billing ₹299/mo.',
+          icon_emoji: '👻'
         }
       ];
 
@@ -344,15 +334,26 @@ function renderSection3AiPlan({ currentSpend, savingsVal, yearlySavingsVal, opti
           estimated_monthly_saving: 199
         },
         {
-          subscription: 'Canva',
+          subscription: 'Canva Pro',
           subscription_id: 'canva',
           action: 'cancel',
-          action_label: 'REVIEW / CANCEL',
+          action_label: 'CANCEL TRIAL',
           tag_class: 'review',
-          reason: 'Used only 3 days this month. Free tier covers standard graphics without recurring fees.',
-          meta: 'Used 3 days · Save ₹500/mo',
-          current_monthly_price: 500,
-          estimated_monthly_saving: 500
+          reason: 'Free trial ends in 2 days. Cancel before renewal to avoid ₹499/mo charge, or downgrade to Canva Free.',
+          meta: 'Trial ends in 2d · Save ₹499/mo',
+          current_monthly_price: 499,
+          estimated_monthly_saving: 499
+        },
+        {
+          subscription: 'Duolingo Super',
+          subscription_id: 'duolingo',
+          action: 'cancel',
+          action_label: 'CANCEL GHOST APP',
+          tag_class: 'leakreview',
+          reason: 'App uninstalled 18 days ago with zero recent usage. Cancelling stops immediate ₹299/mo money leak.',
+          meta: 'Uninstalled · Save ₹299/mo',
+          current_monthly_price: 299,
+          estimated_monthly_saving: 299
         }
       ];
 
