@@ -16,6 +16,15 @@ export function createApiApp() {
 
   const router = express.Router();
 
+  // Middleware: Prevent caching of personalized optimizer data across CDNs/browsers
+  router.use((req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  });
+
   // Profile API
   router.get("/profile", (req, res) => {
     res.json(userProfile);
@@ -94,51 +103,87 @@ export function createApiApp() {
 
   // Insights API
   router.get("/insights", (req, res) => {
-    const period = (req.query.period as string) || "thismonth";
-    const data = INSIGHTS_PERIOD_DATA[period] || INSIGHTS_PERIOD_DATA.thismonth;
-    res.json(data);
+    const startTime = Date.now();
+    try {
+      const period = (req.query.period as string) || "thismonth";
+      console.log(`[API /insights] Request start | Period: ${period} | UserProfile: ${Boolean(userProfile)}`);
+      const data = INSIGHTS_PERIOD_DATA[period] || INSIGHTS_PERIOD_DATA.thismonth;
+      const duration = Date.now() - startTime;
+      console.log(`[API /insights] Success | Duration: ${duration}ms`);
+      res.json(data);
+    } catch (err: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[API /insights] Failure | Error: ${err?.name || "UnknownError"} | Duration: ${duration}ms`);
+      res.status(500).json({ error: "Failed to load insights data" });
+    }
   });
 
   // AI Optimizer API powered by Gemini / OpenAI / Resilient Engine
   router.post("/optimizer", async (req, res) => {
+    const startTime = Date.now();
     try {
       const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
       const forceRefresh = Boolean(req.body.forceRefresh);
+      console.log(`[API /optimizer POST] Request start | Budget: ₹${budget} | Subscriptions: ${subscriptions.length} | ForceRefresh: ${forceRefresh}`);
+      
       const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, forceRefresh);
+      const duration = Date.now() - startTime;
+      console.log(`[API /optimizer POST] Success | Engine: ${result.ai_engine_used} | Savings: ₹${result.total_potential_monthly_saving} | Duration: ${duration}ms`);
       res.json(result);
     } catch (err: any) {
-      console.error("Optimizer Error:", err);
+      const duration = Date.now() - startTime;
+      console.error(`[API /optimizer POST] Error: ${err?.name || "Error"} - ${err?.message || "Unknown"} | Duration: ${duration}ms`);
       res.status(500).json({ error: err.message || "Failed to run optimizer" });
     }
   });
 
   router.get("/optimizer", async (req, res) => {
+    const startTime = Date.now();
     try {
       const budget = userProfile.monthlyBudget || 1000;
+      console.log(`[API /optimizer GET] Request start | Budget: ₹${budget} | Subscriptions: ${subscriptions.length}`);
       const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, false);
+      const duration = Date.now() - startTime;
+      console.log(`[API /optimizer GET] Success | Engine: ${result.ai_engine_used} | Duration: ${duration}ms`);
       res.json(result);
     } catch (err: any) {
-      console.error("Optimizer GET Error:", err);
+      const duration = Date.now() - startTime;
+      console.error(`[API /optimizer GET] Error: ${err?.name || "Error"} - ${err?.message || "Unknown"} | Duration: ${duration}ms`);
       res.status(500).json({ error: err.message || "Failed to get optimizer plan" });
     }
   });
 
   router.post("/optimizer/refresh", async (req, res) => {
+    const startTime = Date.now();
     try {
       const budget = Number(req.body.budget) || userProfile.monthlyBudget || 1000;
+      console.log(`[API /optimizer/refresh POST] Request start | Budget: ₹${budget}`);
       const result = await runOpenAiOptimizer(subscriptions, userProfile, wishlist, budget, true);
+      const duration = Date.now() - startTime;
+      console.log(`[API /optimizer/refresh POST] Success | Engine: ${result.ai_engine_used} | Duration: ${duration}ms`);
       res.json(result);
     } catch (err: any) {
-      console.error("Optimizer Refresh Error:", err);
+      const duration = Date.now() - startTime;
+      console.error(`[API /optimizer/refresh POST] Error: ${err?.name || "Error"} | Duration: ${duration}ms`);
       res.status(500).json({ error: err.message || "Failed to refresh optimizer" });
     }
   });
 
   // Recommendations & Movies API
   router.get("/recommendations", (req, res) => {
-    const wishlistIds = wishlist.map(w => w.content_id || w.id);
-    const result = getFutureRecommendations(userProfile.movieInterests || ["Superhero", "Action", "Sci-Fi"], subscriptions, wishlistIds);
-    res.json(result);
+    const startTime = Date.now();
+    try {
+      const wishlistIds = wishlist.map(w => w.content_id || w.id);
+      console.log(`[API /recommendations] Request start | Interests: ${userProfile.movieInterests?.length || 0} | Subscriptions: ${subscriptions.length}`);
+      const result = getFutureRecommendations(userProfile.movieInterests || ["Superhero", "Action", "Sci-Fi"], subscriptions, wishlistIds);
+      const duration = Date.now() - startTime;
+      console.log(`[API /recommendations] Success | Categories: ${Object.keys(result || {}).join(", ")} | Duration: ${duration}ms`);
+      res.json(result);
+    } catch (err: any) {
+      const duration = Date.now() - startTime;
+      console.error(`[API /recommendations] Error: ${err?.name || "Error"} | Duration: ${duration}ms`);
+      res.status(500).json({ error: "Failed to generate recommendations" });
+    }
   });
 
   router.get("/movies/upcoming", (req, res) => {
