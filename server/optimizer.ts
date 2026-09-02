@@ -1,4 +1,4 @@
-import { Subscription } from './types';
+import { Subscription } from './types.js';
 
 export function parseDays(strVal?: string | null): number {
   if (!strVal) return 999999;

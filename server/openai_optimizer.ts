@@ -1,28 +1,51 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { Subscription, UserProfile, WishlistItem } from "./types";
-import { DEFAULT_UPCOMING_CONTENT } from "./data";
-import { OPENAI_TOOLS_DEFINITIONS, executeOpenAiTool } from "./openai_tools";
+import { Subscription, UserProfile, WishlistItem } from "./types.js";
+import { DEFAULT_UPCOMING_CONTENT } from "./data.js";
+import { OPENAI_TOOLS_DEFINITIONS, executeOpenAiTool } from "./openai_tools.js";
 
 let openaiClient: OpenAI | null = null;
 let geminiClient: GoogleGenAI | null = null;
+let openAiQuotaExceededUntil = 0;
 
 function getGeminiClient(): GoogleGenAI | null {
-  if (!geminiClient && process.env.GEMINI_API_KEY) {
-    try {
-      geminiClient = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
+  if (!geminiClient) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.API_KEY;
+    if (apiKey) {
+      try {
+        geminiClient = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            }
           }
-        }
-      });
-    } catch (err) {
-      console.warn("Could not initialize Gemini client:", err);
+        });
+      } catch (err) {
+        console.info("Note: Gemini client initialization deferred.");
+      }
     }
   }
   return geminiClient;
+}
+
+function isOpenAiAvailable(): boolean {
+  if (!process.env.OPENAI_API_KEY) return false;
+  if (Date.now() < openAiQuotaExceededUntil) return false;
+  return true;
+}
+
+function handleOpenAiError(err: any, context: string) {
+  const status = err?.status || err?.statusCode || err?.code;
+  const message = err?.message || String(err);
+  const isQuotaOrAuth = status === 429 || message.includes("429") || message.includes("credits") || message.includes("quota") || message.includes("billing") || status === 401 || message.includes("401");
+  
+  if (isQuotaOrAuth) {
+    openAiQuotaExceededUntil = Date.now() + 15 * 60 * 1000;
+    console.info(`[Trackey AI] OpenAI quota/billing inactive (${status || 429}). Seamlessly routing to Gemini & algorithmic reasoning.`);
+  } else {
+    console.info(`[Trackey AI] OpenAI ${context} deferred (${message.slice(0, 80)}). Utilizing resilient fallback engine.`);
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
@@ -532,104 +555,107 @@ Generate the complete structured JSON response matching the required schema.`;
     }
   }
 
-  // 2. Try OpenAI API if configured
-  if (openai) {
-    const toolCtx = { subscriptions, userProfile, wishlist };
-    try {
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ];
+  // 2. Try OpenAI API if configured and available
+  if (isOpenAiAvailable()) {
+    const openai = getOpenAiClient();
+    if (openai) {
+      const toolCtx = { subscriptions, userProfile, wishlist };
+      try {
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ];
 
-      let runnerResponse = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        tools: OPENAI_TOOLS_DEFINITIONS,
-        tool_choice: "auto",
-        response_format: { type: "json_object" }
-      });
-
-      let choice = runnerResponse.choices[0];
-      let iterations = 0;
-
-      while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
-        iterations++;
-        messages.push(choice.message);
-
-        for (const toolCall of choice.message.tool_calls) {
-          if (toolCall.type === "function") {
-            let args = {};
-            try {
-              args = JSON.parse(toolCall.function.arguments || "{}");
-            } catch {}
-            const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result)
-            });
-          }
-        }
-
-        runnerResponse = await openai.chat.completions.create({
+        let runnerResponse = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages,
+          tools: OPENAI_TOOLS_DEFINITIONS,
+          tool_choice: "auto",
           response_format: { type: "json_object" }
         });
-        choice = runnerResponse.choices[0];
-      }
 
-      const contentStr = choice?.message?.content;
-      if (contentStr) {
-        const parsed = JSON.parse(contentStr);
-        if (parsed.recommendations && parsed.current_monthly_spending !== undefined) {
-          const fullResult: OptimizerResponseData = {
-            summary: parsed.summary || `AI optimized subscription portfolio saving ₹${parsed.total_potential_monthly_saving || 699}/month.`,
-            current_monthly_spending: parsed.current_monthly_spending || subscriptions.filter(s => !s.free).reduce((a, b) => a + b.price, 0),
-            current_yearly_spending: parsed.current_yearly_spending || (parsed.current_monthly_spending * 12),
-            optimized_monthly_spending: parsed.optimized_monthly_spending || 1285,
-            optimized_yearly_spending: parsed.optimized_yearly_spending || (parsed.optimized_monthly_spending * 12),
-            total_potential_monthly_saving: parsed.total_potential_monthly_saving || 699,
-            total_potential_yearly_saving: parsed.total_potential_yearly_saving || 8388,
-            budget_analysis: parsed.budget_analysis || {
-              budget,
-              over_budget_amount: Math.max(0, parsed.current_monthly_spending - budget),
-              is_within_budget: parsed.current_monthly_spending <= budget,
-              budget_verdict: parsed.current_monthly_spending > budget ? `⚠️ Spending is over target monthly budget.` : `✨ Spending is within monthly budget.`
-            },
-            attention_items: parsed.attention_items || [],
-            recommendations: parsed.recommendations || [],
-            insights: parsed.insights || [],
-            future_recommendations: parsed.future_recommendations || {
-              top_platform: "Prime Video",
-              top_platform_id: "primevideo",
-              price: 299,
-              headline: "4 upcoming releases next month match your interests.",
-              verdict: "Subscribe to Prime Video next month instead of renewing Netflix.",
-              potential_saving: 200,
-              matched_releases_count: 4
-            },
-            service_switches: parsed.service_switches || [],
-            factors_analyzed: parsed.factors_analyzed || [
-              "Spending vs Budget",
-              "Usage Frequency",
-              "Last Used Days",
-              "Cost per Usage",
-              "Ghost Subscriptions",
-              "Free Trials Ending",
-              "User Interests",
-              "Upcoming OTT Content"
-            ],
-            ai_engine_used: "OpenAI (GPT-4o)",
-            timestamp: new Date().toISOString()
-          };
+        let choice = runnerResponse.choices[0];
+        let iterations = 0;
 
-          cachedOptimizerResult = { data: fullResult, hash: stateHash, expiresAt: Date.now() + 120000 };
-          return fullResult;
+        while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
+          iterations++;
+          messages.push(choice.message);
+
+          for (const toolCall of choice.message.tool_calls) {
+            if (toolCall.type === "function") {
+              let args = {};
+              try {
+                args = JSON.parse(toolCall.function.arguments || "{}");
+              } catch {}
+              const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
+              messages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+              });
+            }
+          }
+
+          runnerResponse = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages,
+            response_format: { type: "json_object" }
+          });
+          choice = runnerResponse.choices[0];
         }
+
+        const contentStr = choice?.message?.content;
+        if (contentStr) {
+          const parsed = JSON.parse(contentStr);
+          if (parsed.recommendations && parsed.current_monthly_spending !== undefined) {
+            const fullResult: OptimizerResponseData = {
+              summary: parsed.summary || `AI optimized subscription portfolio saving ₹${parsed.total_potential_monthly_saving || 699}/month.`,
+              current_monthly_spending: parsed.current_monthly_spending || subscriptions.filter(s => !s.free).reduce((a, b) => a + b.price, 0),
+              current_yearly_spending: parsed.current_yearly_spending || (parsed.current_monthly_spending * 12),
+              optimized_monthly_spending: parsed.optimized_monthly_spending || 1285,
+              optimized_yearly_spending: parsed.optimized_yearly_spending || (parsed.optimized_monthly_spending * 12),
+              total_potential_monthly_saving: parsed.total_potential_monthly_saving || 699,
+              total_potential_yearly_saving: parsed.total_potential_yearly_saving || 8388,
+              budget_analysis: parsed.budget_analysis || {
+                budget,
+                over_budget_amount: Math.max(0, parsed.current_monthly_spending - budget),
+                is_within_budget: parsed.current_monthly_spending <= budget,
+                budget_verdict: parsed.current_monthly_spending > budget ? `⚠️ Spending is over target monthly budget.` : `✨ Spending is within monthly budget.`
+              },
+              attention_items: parsed.attention_items || [],
+              recommendations: parsed.recommendations || [],
+              insights: parsed.insights || [],
+              future_recommendations: parsed.future_recommendations || {
+                top_platform: "Prime Video",
+                top_platform_id: "primevideo",
+                price: 299,
+                headline: "4 upcoming releases next month match your interests.",
+                verdict: "Subscribe to Prime Video next month instead of renewing Netflix.",
+                potential_saving: 200,
+                matched_releases_count: 4
+              },
+              service_switches: parsed.service_switches || [],
+              factors_analyzed: parsed.factors_analyzed || [
+                "Spending vs Budget",
+                "Usage Frequency",
+                "Last Used Days",
+                "Cost per Usage",
+                "Ghost Subscriptions",
+                "Free Trials Ending",
+                "User Interests",
+                "Upcoming OTT Content"
+              ],
+              ai_engine_used: "OpenAI (GPT-4o)",
+              timestamp: new Date().toISOString()
+            };
+
+            cachedOptimizerResult = { data: fullResult, hash: stateHash, expiresAt: Date.now() + 120000 };
+            return fullResult;
+          }
+        }
+      } catch (err) {
+        handleOpenAiError(err, "Optimizer");
       }
-    } catch (err) {
-      console.warn("OpenAI Optimizer execution warning, falling back to algorithmic reasoning:", err);
     }
   }
 
@@ -674,14 +700,16 @@ Return a structured JSON output with:
     }
   }
 
-  // 2. Try OpenAI
-  if (openai) {
-    const toolCtx = { subscriptions, userProfile, wishlist };
-    try {
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        {
-          role: "system",
-          content: `You are Trackey AI, an expert personal subscription intelligence advisor.
+  // 2. Try OpenAI if configured and available
+  if (isOpenAiAvailable()) {
+    const openai = getOpenAiClient();
+    if (openai) {
+      const toolCtx = { subscriptions, userProfile, wishlist };
+      try {
+        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+          {
+            role: "system",
+            content: `You are Trackey AI, an expert personal subscription intelligence advisor.
 Answer the user's question directly and concisely (1-2 sentences) using the available real application data tools.
 Explain the reason in 1 sentence.
 Return a structured JSON output with:
@@ -694,55 +722,56 @@ Return a structured JSON output with:
     "payload": {}
   } | null
 }`
-        },
-        { role: "user", content: query }
-      ];
+          },
+          { role: "user", content: query }
+        ];
 
-      let response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        tools: OPENAI_TOOLS_DEFINITIONS,
-        tool_choice: "auto",
-        response_format: { type: "json_object" }
-      });
-
-      let choice = response.choices[0];
-      let iterations = 0;
-
-      while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
-        iterations++;
-        messages.push(choice.message);
-
-        for (const toolCall of choice.message.tool_calls) {
-          if (toolCall.type === "function") {
-            let args = {};
-            try {
-              args = JSON.parse(toolCall.function.arguments || "{}");
-            } catch {}
-            const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result)
-            });
-          }
-        }
-
-        response = await openai.chat.completions.create({
+        let response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages,
+          tools: OPENAI_TOOLS_DEFINITIONS,
+          tool_choice: "auto",
           response_format: { type: "json_object" }
         });
-        choice = response.choices[0];
-      }
 
-      const text = choice?.message?.content;
-      if (text) {
-        const parsed = JSON.parse(text);
-        if (parsed.answer) return parsed;
+        let choice = response.choices[0];
+        let iterations = 0;
+
+        while (choice?.message?.tool_calls && choice.message.tool_calls.length > 0 && iterations < 3) {
+          iterations++;
+          messages.push(choice.message);
+
+          for (const toolCall of choice.message.tool_calls) {
+            if (toolCall.type === "function") {
+              let args = {};
+              try {
+                args = JSON.parse(toolCall.function.arguments || "{}");
+              } catch {}
+              const result = executeOpenAiTool(toolCall.function.name, args, toolCtx);
+              messages.push({
+                role: "tool",
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result)
+              });
+            }
+          }
+
+          response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages,
+            response_format: { type: "json_object" }
+          });
+          choice = response.choices[0];
+        }
+
+        const text = choice?.message?.content;
+        if (text) {
+          const parsed = JSON.parse(text);
+          if (parsed.answer) return parsed;
+        }
+      } catch (err) {
+        handleOpenAiError(err, "Chat Advisor");
       }
-    } catch (err) {
-      console.warn("OpenAI Chat Advisor execution warning:", err);
     }
   }
 

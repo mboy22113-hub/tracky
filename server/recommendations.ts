@@ -1,5 +1,5 @@
-import { Subscription, UserProfile, WishlistItem } from './types';
-import { DEFAULT_UPCOMING_CONTENT } from './data';
+import { Subscription, UserProfile, WishlistItem } from './types.js';
+import { DEFAULT_UPCOMING_CONTENT } from './data.js';
 
 export function getUpcomingMovies(
   userInterests: string[] = ["Superhero", "Action", "Sci-Fi"],

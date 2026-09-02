@@ -1,9 +1,9 @@
 import express from "express";
-import { Subscription, UserProfile, WishlistItem } from "./types";
-import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data";
-import { compareOttServices, compareUniversalServices } from "./comparisons";
-import { getUpcomingMovies, getFutureRecommendations } from "./recommendations";
-import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer";
+import { Subscription, UserProfile, WishlistItem } from "./types.js";
+import { INITIAL_SUBSCRIPTIONS, INITIAL_USER, INITIAL_WISHLIST, INSIGHTS_PERIOD_DATA } from "./data.js";
+import { compareOttServices, compareUniversalServices } from "./comparisons.js";
+import { getUpcomingMovies, getFutureRecommendations } from "./recommendations.js";
+import { runOpenAiOptimizer, runOpenAiAdvisorChat } from "./openai_optimizer.js";
 
 // In-Memory State Store
 let subscriptions: Subscription[] = JSON.parse(JSON.stringify(INITIAL_SUBSCRIPTIONS));
@@ -246,7 +246,7 @@ export function createApiApp() {
     res.json({
       status: "ok",
       app: "Trackey Node/TypeScript Engine",
-      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.API_KEY),
       hasOpenAiKey: Boolean(process.env.OPENAI_API_KEY)
     });
   });
